@@ -1037,11 +1037,11 @@ fun PresupuestoScreen(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = {
                         if (cliente.isBlank()) mensaje = "Indica el cliente antes de exportar."
-                        else excelLauncher.launch("Presupuesto_" + cliente.replace(Regex("[^a-zA-Z0-9_-]"), "_").take(35) + ".xlsx")
+                        else { destinoExportacion = null; excelLauncher.launch("Presupuesto_" + cliente.replace(Regex("[^a-zA-Z0-9_-]"), "_").take(35) + ".xlsx") }
                     }, modifier = Modifier.weight(1f)) { Text("Excel .xlsx") }
                     OutlinedButton(onClick = {
                         if (cliente.isBlank()) mensaje = "Indica el cliente antes de exportar."
-                        else pdfLauncher.launch("Presupuesto_" + cliente.replace(Regex("[^a-zA-Z0-9_-]"), "_").take(35) + ".pdf")
+                        else { destinoExportacion = null; pdfLauncher.launch("Presupuesto_" + cliente.replace(Regex("[^a-zA-Z0-9_-]"), "_").take(35) + ".pdf") }
                     }, modifier = Modifier.weight(1f)) { Text("PDF") }
                 }
                 OutlinedButton(onClick = { confirmarNuevo = true }, modifier = Modifier.fillMaxWidth()) {
@@ -1124,7 +1124,8 @@ fun PresupuestoScreen(
             title = { Text("¿Crear nuevo presupuesto?") },
             text = { Text("Se limpiará el borrador actual. Guarda primero si quieres conservarlo.") },
             confirmButton = { Button(onClick = {
-                onNuevo(); confirmarNuevo = false; mensaje = "Nuevo presupuesto listo."
+                onNuevo(); mostrarEditor = true; presupuestoAbierto = null
+                confirmarNuevo = false; mensaje = "Nuevo presupuesto listo."
             }) { Text("Crear nuevo") } },
             dismissButton = { TextButton(onClick = { confirmarNuevo = false }) { Text("Cancelar") } })
     }
