@@ -163,17 +163,23 @@ fun FinanzasPorObraScreen(
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         item {
-            Text("Finanzas de obras", fontWeight = FontWeight.Bold, fontSize = 22.sp, color = TextMain)
-            Text("Cada gasto y abono pertenece a una obra. Las cotizaciones no son pagos.",
-                fontSize = 12.sp, color = TextMuted)
-            OutlinedButton(
-                onClick = { abrirSelector = true },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(if (activa == null) "Todas las obras · Vista general"
-                    else activa.first.obra.ifBlank { activa.first.cliente } + " · " + activa.first.cliente)
-                Spacer(Modifier.weight(1f))
-                Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+            Text("Finanzas", fontWeight = FontWeight.Bold, fontSize = 21.sp, color = TextMain)
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(if (activa == null) "Todas las obras"
+                        else activa.first.obra.ifBlank { activa.first.cliente },
+                        color = TextMain, fontWeight = FontWeight.SemiBold, fontSize = 15.sp,
+                        maxLines = 1)
+                    Text(if (activa == null) "Resumen general" else activa.first.cliente,
+                        color = TextMuted, fontSize = 11.sp, maxLines = 1)
+                }
+                OutlinedButton(onClick = { abrirSelector = true },
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                    modifier = Modifier.height(36.dp)) {
+                    Text("Elegir obra", fontSize = 12.sp)
+                    Icon(Icons.Default.ArrowDropDown, contentDescription = null,
+                        modifier = Modifier.size(18.dp))
+                }
             }
             if (aviso.isNotBlank()) Text(aviso, color = AccentAmber, fontSize = 12.sp)
         }
@@ -239,34 +245,50 @@ fun FinanzasPorObraScreen(
                     Text(if (pagos >= presupuesto.total) "Pago total recibido" else
                         "Saldo pendiente del cliente: " + formatoMontoObra(presupuesto.total - pagos),
                         fontWeight = FontWeight.Bold, color = AccentAmber)
-                    OutlinedButton(onClick = {
+                    TextButton(onClick = {
                         presupuestoElegidoId = presupuesto.id
                         fechaInput = control.fechaInicio
                         plazoInput = control.diasPlazo.toString()
                         anticipoInput = control.anticipoPorcentaje.toString()
                         estadoInput = control.estado
                         mostrarConfig = true
-                    }, modifier = Modifier.fillMaxWidth()) { Text("Editar plazo, anticipo y estado") }
+                    }, contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)) {
+                        Icon(Icons.Default.Edit, contentDescription = null,
+                            modifier = Modifier.size(15.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Editar condiciones", fontSize = 12.sp)
+                    }
                 }
             }
         }
         item {
-            Button(onClick = {
-                if (activa == null) aviso = "Selecciona primero una obra para asignar el gasto o abono."
-                else { descripcionInput = ""; montoInput = ""; ingresoInput = true; tipoIngreso = "Abono cliente"; mostrarMovimiento = true }
-            }, modifier = Modifier.fillMaxWidth()) {
-                Icon(Icons.Default.Add, contentDescription = null)
-                Spacer(Modifier.width(6.dp))
-                Text("Registrar gasto o abono de esta obra")
-            }
-            OutlinedButton(onClick = {
-                presupuestoElegidoId = presupuestos.firstOrNull { p ->
-                    controles.none { it.presupuestoId == p.id }
-                }?.id ?: 0L
-                fechaInput = hoyObra(); plazoInput = "14"; anticipoInput = "25"
-                estadoInput = "En ejecución"; mostrarConfig = true
-            }, modifier = Modifier.fillMaxWidth()) {
-                Text("+ Iniciar obra desde presupuesto guardado")
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = {
+                    if (activa == null) aviso = "Selecciona una obra antes de registrar movimientos."
+                    else {
+                        descripcionInput = ""; montoInput = ""; ingresoInput = true
+                        tipoIngreso = "Abono cliente"; mostrarMovimiento = true
+                    }
+                }, enabled = activa != null,
+                    modifier = Modifier.weight(1f).height(40.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp)) {
+                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Gasto / abono", fontSize = 12.sp, maxLines = 1)
+                }
+                OutlinedButton(onClick = {
+                    presupuestoElegidoId = presupuestos.firstOrNull { p ->
+                        controles.none { it.presupuestoId == p.id }
+                    }?.id ?: 0L
+                    fechaInput = hoyObra(); plazoInput = "14"; anticipoInput = "25"
+                    estadoInput = "En ejecución"; mostrarConfig = true
+                }, modifier = Modifier.weight(1f).height(40.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp)) {
+                    Icon(Icons.Default.Construction, contentDescription = null,
+                        modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Iniciar obra", fontSize = 12.sp, maxLines = 1)
+                }
             }
         }
         item {
