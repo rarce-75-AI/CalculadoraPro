@@ -890,8 +890,10 @@ fun PresupuestoScreen(
             Button(
                 onClick = {
                     val resumen = buildString {
-                        appendLine("*PRESUPUESTO DE REMODELACIÓN*")
-                        appendLine("Obra: $cliente")
+                        appendLine("*CÁLCULO DE OBRA — PRESUPUESTO*")
+                        appendLine("Cliente: $cliente")
+                        appendLine("Obra: $obra")
+                        appendLine("Fecha: ${fechaPresupuesto()}")
                         appendLine("-----------------------------")
                         items.forEach {
                             appendLine("• ${it.nombre} (${it.cantidad}): ${formatoCLP(it.total)}")
