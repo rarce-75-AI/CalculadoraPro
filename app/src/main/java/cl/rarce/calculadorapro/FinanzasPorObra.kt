@@ -58,7 +58,7 @@ private fun diasRestantesObra(inicio: String, dias: Int): Long? {
     return (fin.time - hoy.time) / 86400000L
 }
 
-private fun cargarControlObras(context: Context): List<ControlObra> = runCatching {
+fun cargarControlObras(context: Context): List<ControlObra> = runCatching {
     val raw = context.getSharedPreferences("calculadora_pro_v2", Context.MODE_PRIVATE)
         .getString("control_obras_v1", "[]") ?: "[]"
     val a = JSONArray(raw)
@@ -125,6 +125,7 @@ fun FinanzasPorObraScreen(
     var montoInput by remember { mutableStateOf("") }
     var ingresoInput by remember { mutableStateOf(true) }
     var tipoIngreso by remember { mutableStateOf("Abono cliente") }
+    var anticipoRecibido by remember { mutableStateOf(true) }
 
     val movimientosFiltrados = if (obraSeleccionadaId == 0L) movimientos.toList()
         else movimientos.filter { it.obraId == obraSeleccionadaId }
@@ -148,12 +149,33 @@ fun FinanzasPorObraScreen(
             plazo == null || plazo <= 0 || plazo > 3650 -> aviso = "Plazo inválido (1 a 3650 días)."
             anticipo == null || anticipo !in 0..100 -> aviso = "Anticipo debe estar entre 0% y 100%."
             else -> {
-                controles.removeAll { it.presupuestoId == p.id }
-                controles.add(ControlObra(p.id, fechaInput, plazo!!, anticipo!!, estadoInput))
-                persistirControlObras(context, controles)
-                obraSeleccionadaId = p.id
-                mostrarConfig = false
-                aviso = "Configuración de obra guardada. El anticipo todavía no se considera cobrado."
+                val nuevaObra = controles.none { it.presupuestoId == p.id }
+                val montoAnticipo = (p.total * anticipo!! / 100L)
+                if (nuevaObra && anticipoRecibido && montoAnticipo > Int.MAX_VALUE) {
+                    aviso = "Anticipo demasiado alto para registrarlo. Revisa el monto."
+                } else {
+                    controles.removeAll { it.presupuestoId == p.id }
+                    controles.add(ControlObra(p.id, fechaInput, plazo!!, anticipo!!, estadoInput))
+                    persistirControlObras(context, controles)
+                    if (nuevaObra && anticipoRecibido && montoAnticipo > 0) {
+                        movimientos.add(0, MovimientoObra(
+                            id = System.currentTimeMillis(),
+                            titulo = "Anticipo inicial ${anticipo}%",
+                            categoria = "Anticipo",
+                            monto = montoAnticipo.toInt(),
+                            esIngreso = true,
+                            obraId = p.id
+                        ))
+                    }
+                    obraSeleccionadaId = p.id
+                    mostrarConfig = false
+                    aviso = when {
+                        !nuevaObra -> "Condiciones de obra actualizadas; no se creó un nuevo cobro."
+                        anticipoRecibido && montoAnticipo > 0 ->
+                            "Obra iniciada. Anticipo recibido y registrado: " + formatoMontoObra(montoAnticipo)
+                        else -> "Obra iniciada sin anticipo recibido."
+                    }
+                }
             }
         }
     }
@@ -251,6 +273,7 @@ fun FinanzasPorObraScreen(
                         plazoInput = control.diasPlazo.toString()
                         anticipoInput = control.anticipoPorcentaje.toString()
                         estadoInput = control.estado
+                        anticipoRecibido = false
                         mostrarConfig = true
                     }, contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)) {
                         Icon(Icons.Default.Edit, contentDescription = null,
@@ -281,7 +304,7 @@ fun FinanzasPorObraScreen(
                         controles.none { it.presupuestoId == p.id }
                     }?.id ?: 0L
                     fechaInput = hoyObra(); plazoInput = "14"; anticipoInput = "25"
-                    estadoInput = "En ejecución"; mostrarConfig = true
+                    estadoInput = "En ejecución"; anticipoRecibido = true; mostrarConfig = true
                 }, modifier = Modifier.weight(1f).height(40.dp),
                     contentPadding = PaddingValues(horizontal = 8.dp)) {
                     Icon(Icons.Default.Construction, contentDescription = null,
@@ -381,7 +404,21 @@ fun FinanzasPorObraScreen(
                                 label = { Text(if (st == "Terminada") "Terminada" else "Activa") })
                         }
                     }
-                    Text("El anticipo pactado no se registrará como ingreso hasta que lo cobres.",
+                    if (controles.none { it.presupuestoId == presupuestoElegidoId }) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(checked = anticipoRecibido, onCheckedChange = { anticipoRecibido = it })
+                            Text("Anticipo ya recibido: registrarlo al iniciar",
+                                color = TextMain, fontSize = 12.sp)
+                        }
+                        val elegido = presupuestos.find { it.id == presupuestoElegidoId }
+                        val porcentaje = anticipoInput.toIntOrNull()
+                        if (elegido != null && porcentaje != null && porcentaje in 0..100) {
+                            Text("Anticipo a registrar: " +
+                                formatoMontoObra(elegido.total * porcentaje / 100L),
+                                color = AccentGreen, fontSize = 12.sp)
+                        }
+                    }
+                    Text("Marca el anticipo únicamente si el depósito fue recibido. Al editar una obra no se duplica.",
                         color = AccentAmber, fontSize = 11.sp)
                 }
             },
