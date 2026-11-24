@@ -139,11 +139,14 @@ fun InicioObrasScreen(
                         verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(p.obra.ifBlank { p.cliente }, color = TextMain, fontWeight = FontWeight.Bold)
                         Text("Cliente: " + p.cliente, color = TextMuted, fontSize = 12.sp)
-                        LinearProgressIndicator(progress = { porcentajePlazo },
-                            modifier = Modifier.fillMaxWidth().height(7.dp), color = AccentBlue)
-                        Text("Plazo transcurrido: " + (porcentajePlazo * 100).toInt() +
-                            "% · No representa avance físico",
+                        Text("Avance físico declarado: " + control.avanceFisico + "%",
+                            color = AccentGreen, fontSize = 11.sp)
+                        LinearProgressIndicator(progress = { control.avanceFisico / 100f },
+                            modifier = Modifier.fillMaxWidth().height(7.dp), color = AccentGreen)
+                        Text("Plazo transcurrido: " + (porcentajePlazo * 100).toInt() + "%",
                             color = TextMuted, fontSize = 11.sp)
+                        LinearProgressIndicator(progress = { porcentajePlazo },
+                            modifier = Modifier.fillMaxWidth().height(5.dp), color = AccentBlue)
                     }
                 }
             }
