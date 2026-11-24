@@ -1,5 +1,8 @@
 package cl.rarce.calculadorapro
 
+import android.content.Context
+import androidx.compose.ui.platform.LocalContext
+import org.json.JSONObject
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -170,22 +173,55 @@ fun ConfiguradorObraScreen(
     onAgregar: (List<MaterialItem>) -> Unit,
     onCatalogo: () -> Unit
 ) {
-    var trabajo by remember { mutableStateOf("Piso cerámico") }
-    var largo by remember { mutableStateOf("") }
-    var ancho by remember { mutableStateOf("") }
-    var espesor by remember { mutableStateOf("10") }
-    var merma by remember { mutableStateOf("0") }
-    var buscar by remember { mutableStateOf("") }
-    var filtroElegidos by remember { mutableStateOf(false) }
+    // Borrador persistente: no se pierde al cambiar entre Trabajos, Precios y Presupuesto.
+    val context = LocalContext.current
+    val borradorPrefs = remember(context) {
+        context.getSharedPreferences("calculo_obra_borrador_v1", Context.MODE_PRIVATE)
+    }
+    var trabajo by remember { mutableStateOf(borradorPrefs.getString("trabajo", "Piso cerámico") ?: "Piso cerámico") }
+    var largo by remember { mutableStateOf(borradorPrefs.getString("largo", "") ?: "") }
+    var ancho by remember { mutableStateOf(borradorPrefs.getString("ancho", "") ?: "") }
+    var espesor by remember { mutableStateOf(borradorPrefs.getString("espesor", "10") ?: "10") }
+    var merma by remember { mutableStateOf(borradorPrefs.getString("merma", "0") ?: "0") }
+    var buscar by remember { mutableStateOf(borradorPrefs.getString("buscar", "") ?: "") }
+    var filtroElegidos by remember { mutableStateOf(borradorPrefs.getBoolean("filtroElegidos", false)) }
     var expanded by remember { mutableStateOf(false) }
-    var solucion by remember { mutableStateOf("") }
-    var consumos by remember { mutableStateOf(mapOf<String, String>()) }
-    // Dosificación de referencia, editable por proyecto. No reemplaza diseño de mezcla.
-    var cementoKgM3 by remember { mutableStateOf("300") }
-    var arenaM3M3 by remember { mutableStateOf("0,55") }
-    var gravaM3M3 by remember { mutableStateOf("0,80") }
-    var traslapeMalla by remember { mutableStateOf("10") }
-    val incluirSugerido = remember { mutableStateMapOf<String, Boolean>() }
+    var solucion by remember { mutableStateOf(borradorPrefs.getString("solucion", "Sobre piso existente") ?: "Sobre piso existente") }
+    var consumos by remember {
+        mutableStateOf(runCatching {
+            val json = JSONObject(borradorPrefs.getString("consumos", "{}") ?: "{}")
+            json.keys().asSequence().associateWith { json.optString(it, "") }
+        }.getOrDefault(emptyMap<String, String>()))
+    }
+    // Dosificación orientativa editable, persistida en el borrador.
+    var cementoKgM3 by remember { mutableStateOf(borradorPrefs.getString("cementoKgM3", "300") ?: "300") }
+    var arenaM3M3 by remember { mutableStateOf(borradorPrefs.getString("arenaM3M3", "0,55") ?: "0,55") }
+    var gravaM3M3 by remember { mutableStateOf(borradorPrefs.getString("gravaM3M3", "0,80") ?: "0,80") }
+    var traslapeMalla by remember { mutableStateOf(borradorPrefs.getString("traslapeMalla", "10") ?: "10") }
+    val incluirSugerido = remember {
+        mutableStateMapOf<String, Boolean>().apply {
+            runCatching {
+                val json = JSONObject(borradorPrefs.getString("sugeridos", "{}") ?: "{}")
+                json.keys().forEach { key -> this[key] = json.optBoolean(key, true) }
+            }
+        }
+    }
+
+    fun guardarBorrador() {
+        val factores = JSONObject().apply { consumos.forEach { (k, v) -> put(k, v) } }
+        val sugeridos = JSONObject().apply { incluirSugerido.forEach { (k, v) -> put(k, v) } }
+        borradorPrefs.edit()
+            .putString("trabajo", trabajo).putString("solucion", solucion)
+            .putString("largo", largo).putString("ancho", ancho)
+            .putString("espesor", espesor).putString("merma", merma)
+            .putString("buscar", buscar).putBoolean("filtroElegidos", filtroElegidos)
+            .putString("cementoKgM3", cementoKgM3).putString("arenaM3M3", arenaM3M3)
+            .putString("gravaM3M3", gravaM3M3).putString("traslapeMalla", traslapeMalla)
+            .putString("consumos", factores.toString()).putString("sugeridos", sugeridos.toString())
+            .apply()
+    }
+    // El estado se conserva incluso al desmontarse esta pantalla por la navegación.
+    SideEffect { guardarBorrador() }
 
     val opciones = when (trabajo) {
         "Radier" -> listOf("Hormigón simple", "Con malla", "Sobre base compactada")
@@ -196,12 +232,14 @@ fun ConfiguradorObraScreen(
         "Techumbre" -> listOf("Plancha metálica", "Tejas", "Otra cubierta")
         else -> listOf("Definido por usuario")
     }
-    LaunchedEffect(trabajo) { solucion = opciones.first(); consumos = emptyMap(); incluirSugerido.clear() }
+    // No reiniciar el formulario al volver a Trabajos. Sólo cambiar solución si el usuario
+    // seleccionó explícitamente un tipo distinto.
+    val solucionActual = if (solucion in opciones) solucion else opciones.first()
     val l = numObra(largo) ?: 0.0
     val a = numObra(ancho) ?: 0.0
     val area = l * a
     val volumen = area * (numObra(espesor) ?: 0.0) / 100.0
-    val esVolumen = trabajo == "Radier" || (trabajo == "Piso cerámico" && solucion == "Con radier nuevo")
+    val esVolumen = trabajo == "Radier" || (trabajo == "Piso cerámico" && solucionActual == "Con radier nuevo")
     val valido = l > 0.0 && a > 0.0 && l <= 1000.0 && a <= 1000.0 &&
         (!esVolumen || (numObra(espesor) ?: 0.0) > 0.0)
     val desperdicio = (numObra(merma) ?: 0.0).coerceIn(0.0, 100.0)
@@ -213,7 +251,7 @@ fun ConfiguradorObraScreen(
         if (cantidad <= 0 || cantidad > Int.MAX_VALUE ||
             cantidad * precio.toLong() > Int.MAX_VALUE) null
         else MaterialItem(
-            trabajo + " / " + solucion + " / " + nombre,
+            trabajo + " / " + solucionActual + " / " + nombre,
             cantidad.toString() + " " + (unidades[nombre] ?: "unidad"),
             precio, (cantidad * precio).toInt()
         )
@@ -234,7 +272,7 @@ fun ConfiguradorObraScreen(
             val costo = ceil(cantidad * p.toDouble()).coerceIn(0.0, Int.MAX_VALUE.toDouble()).toInt()
             val cantidadTexto = if (unidad == "sacos") cantidad.toLong().toString() else mostrarObra(cantidad)
             return MaterialItem(
-                "Radier / " + solucion + " / " + nombre,
+                "Radier / " + solucionActual + " / " + nombre,
                 cantidadTexto + " " + unidad,
                 p, costo
             )
@@ -243,7 +281,7 @@ fun ConfiguradorObraScreen(
             add(recomendado("Cemento 25kg (saco)", sacos, "sacos"))
             add(recomendado("Arena para hormigón (m³)", arena, "m³"))
             add(recomendado("Grava para hormigón (m³)", grava, "m³"))
-            if (solucion == "Con malla") add(recomendado("Malla electrosoldada (m²)", malla, "m²"))
+            if (solucionActual == "Con malla") add(recomendado("Malla electrosoldada (m²)", malla, "m²"))
         }
     } else emptyList()
     val sugeridosElegidos = sugerenciasRadier.filter { item ->
@@ -273,7 +311,22 @@ fun ConfiguradorObraScreen(
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) })
                 ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                     tiposTrabajo.forEach { t ->
-                        DropdownMenuItem(text = { Text(t) }, onClick = { trabajo = t; expanded = false })
+                        DropdownMenuItem(text = { Text(t) }, onClick = {
+                            if (trabajo != t) {
+                                trabajo = t
+                                solucion = when (t) {
+                                    "Radier" -> "Hormigón simple"
+                                    "Piso cerámico", "Piso flotante" -> "Sobre piso existente"
+                                    "Tabique" -> "Estructura de madera"
+                                    "Muro" -> "Ladrillo o bloque"
+                                    "Techumbre" -> "Plancha metálica"
+                                    else -> "Definido por usuario"
+                                }
+                                consumos = emptyMap()
+                                incluirSugerido.clear()
+                            }
+                            expanded = false
+                        })
                     }
                 }
             }
@@ -283,7 +336,7 @@ fun ConfiguradorObraScreen(
             opciones.forEach { op ->
                 Row(Modifier.fillMaxWidth().clickable { solucion = op },
                     verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(selected = solucion == op, onClick = { solucion = op })
+                    RadioButton(selected = solucionActual == op, onClick = { solucion = op })
                     Text(op, color = TextMain, fontSize = 13.sp)
                 }
             }
@@ -330,7 +383,7 @@ fun ConfiguradorObraScreen(
                     label = { Text("Grava (m³/m³)") }, modifier = Modifier.weight(1f),
                     singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
             }
-            if (solucion == "Con malla") {
+            if (solucionActual == "Con malla") {
                 OutlinedTextField(value = traslapeMalla, onValueChange = { traslapeMalla = it },
                     label = { Text("Traslape y recortes de malla (%)") },
                     modifier = Modifier.fillMaxWidth(), singleLine = true,
