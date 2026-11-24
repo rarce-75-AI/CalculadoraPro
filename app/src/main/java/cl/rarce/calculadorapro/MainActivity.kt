@@ -105,7 +105,18 @@ fun CalculadoraProApp() {
             }
         }
     } }
-    val itemsPresupuesto = remember { mutableStateListOf<MaterialItem>() }
+    val itemsPresupuesto = remember {
+        mutableStateListOf<MaterialItem>().also { lista ->
+            runCatching {
+                val data = JSONArray(prefs.getString("presupuesto_items", "[]"))
+                for (i in 0 until data.length()) {
+                    val x = data.getJSONObject(i)
+                    lista.add(MaterialItem(x.getString("nombre"), x.getString("cantidad"),
+                        x.getInt("precio"), x.getInt("total")))
+                }
+            }
+        }
+    }
     var nombreCliente by remember { mutableStateOf(prefs.getString("cliente", "") ?: "") }
     var manoDeObra by remember { mutableStateOf(prefs.getString("manoDeObra", "0") ?: "0") }
 
@@ -125,11 +136,60 @@ fun CalculadoraProApp() {
         ).apply {
             runCatching {
                 val saved = JSONObject(prefs.getString("precios", "{}"))
-                keys.toList().forEach { key ->
-                    if (saved.has(key)) this[key] = saved.getInt(key)
+                saved.keys().forEach { key ->
+                    this[key] = saved.optInt(key, 0)
                 }
             }
         }
+    }
+
+    val categoriasPrecios = remember {
+        mutableStateMapOf<String, String>().apply {
+            val saved = runCatching { JSONObject(prefs.getString("categorias_precios", "{}")) }.getOrDefault(JSONObject())
+            preciosBase.keys.forEach { key ->
+                this[key] = saved.optString(key, when {
+                    key.contains("Cerámica", true) || key.contains("Bekrón", true) ||
+                        key.contains("Fragüe", true) -> "Cerámicas y pisos"
+                    key.contains("Cemento", true) || key.contains("Ladrillo", true) -> "Hormigón y áridos"
+                    key.contains("Volcanita", true) || key.contains("Metalcon", true) -> "Tabiquería"
+                    key.contains("Zinc", true) || key.contains("Costanera", true) -> "Techumbres"
+                    else -> "Otros"
+                })
+            }
+        }
+    }
+    val unidadesPrecios = remember {
+        mutableStateMapOf<String, String>().apply {
+            val saved = runCatching { JSONObject(prefs.getString("unidades_precios", "{}")) }.getOrDefault(JSONObject())
+            preciosBase.keys.forEach { key ->
+                this[key] = saved.optString(key, when {
+                    key.contains("m²") -> "m²"
+                    key.contains("saco", true) -> "saco"
+                    key.contains("bolsa", true) -> "bolsa"
+                    key.contains("tira", true) -> "tira"
+                    else -> "unidad"
+                })
+            }
+        }
+    }
+    // Presupuesto local persistente: una partida nueva nunca reemplaza las anteriores.
+    LaunchedEffect(preciosBase.toMap(), categoriasPrecios.toMap(), unidadesPrecios.toMap()) {
+        val categoriasJson = JSONObject()
+        categoriasPrecios.forEach { (key, value) -> categoriasJson.put(key, value) }
+        val unidadesJson = JSONObject()
+        unidadesPrecios.forEach { (key, value) -> unidadesJson.put(key, value) }
+        prefs.edit().putString("categorias_precios", categoriasJson.toString())
+            .putString("unidades_precios", unidadesJson.toString()).apply()
+    }
+    LaunchedEffect(itemsPresupuesto.toList()) {
+        val data = JSONArray()
+        itemsPresupuesto.forEach { item ->
+            data.put(JSONObject().apply {
+                put("nombre", item.nombre); put("cantidad", item.cantidad)
+                put("precio", item.precioUnitario); put("total", item.total)
+            })
+        }
+        prefs.edit().putString("presupuesto_items", data.toString()).apply()
     }
 
     LaunchedEffect(movimientos.toList()) {
@@ -158,8 +218,8 @@ fun CalculadoraProApp() {
             ) {
                 val navItems = listOf(
                     Triple("Finanzas", Icons.Default.AccountBalanceWallet, 0),
-                    Triple("Cálculos", Icons.Default.Calculate, 1),
-                    Triple("Presupuesto", Icons.Default.Description, 2),
+                    Triple("Trabajos", Icons.Default.Calculate, 1),
+                    Triple("Ppto.", Icons.Default.Description, 2),
                     Triple("Precios", Icons.Default.Inventory, 3)
                 )
                 navItems.forEach { (label, icon, index) ->
@@ -183,13 +243,15 @@ fun CalculadoraProApp() {
         Box(modifier = Modifier.padding(innerPadding)) {
             when (selectedTab) {
                 0 -> FinanzasObraScreen(movimientos)
-                1 -> CalculadorasScreen(
-                    preciosBase = preciosBase,
-                    onAgregarAlPresupuesto = { nuevosItems ->
-                        itemsPresupuesto.clear()
+                1 -> ConfiguradorObraScreen(
+                    precios = preciosBase,
+                    categorias = categoriasPrecios,
+                    unidades = unidadesPrecios,
+                    onAgregar = { nuevosItems ->
                         itemsPresupuesto.addAll(nuevosItems)
                         selectedTab = 2
-                    }
+                    },
+                    onCatalogo = { selectedTab = 3 }
                 )
                 2 -> PresupuestoScreen(
                     cliente = nombreCliente,
@@ -197,6 +259,8 @@ fun CalculadoraProApp() {
                     items = itemsPresupuesto,
                     manoDeObra = manoDeObra,
                     onManoDeObraChange = { manoDeObra = it },
+                    onQuitarItem = { index -> if (index in itemsPresupuesto.indices) itemsPresupuesto.removeAt(index) },
+                    onVaciarItems = { itemsPresupuesto.clear() },
                     onGuardarEnFinanzas = { totalFinal ->
                         movimientos.add(
                             0,
@@ -211,7 +275,7 @@ fun CalculadoraProApp() {
                         selectedTab = 0
                     }
                 )
-                3 -> PreciosBaseScreen(preciosBase)
+                3 -> CatalogoObraScreen(preciosBase, categoriasPrecios, unidadesPrecios)
             }
         }
     }
@@ -587,6 +651,8 @@ fun PresupuestoScreen(
     items: List<MaterialItem>,
     manoDeObra: String,
     onManoDeObraChange: (String) -> Unit,
+    onQuitarItem: (Int) -> Unit,
+    onVaciarItems: () -> Unit,
     onGuardarEnFinanzas: (Int) -> Unit
 ) {
     val context = LocalContext.current
@@ -630,19 +696,28 @@ fun PresupuestoScreen(
             }
         }
 
-        items(items) { item ->
+        item {
+            Text(items.size.toString() + " materiales y partidas acumuladas",
+                fontSize = 12.sp, color = TextMuted)
+            if (items.isNotEmpty()) {
+                TextButton(onClick = onVaciarItems) { Text("Vaciar presupuesto", color = AccentRed) }
+            }
+        }
+        items(items.size) { index ->
+            val item = items[index]
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(BgCard, RoundedCornerShape(10.dp))
-                    .padding(12.dp),
-                horizontalArrangement = Arrangement.SpaceBetween
+                modifier = Modifier.fillMaxWidth()
+                    .background(BgCard, RoundedCornerShape(10.dp)).padding(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
-                    Text(item.nombre, fontWeight = FontWeight.SemiBold, color = TextMain, fontSize = 14.sp)
+                Column(Modifier.weight(1f)) {
+                    Text(item.nombre, fontWeight = FontWeight.SemiBold,
+                        color = TextMain, fontSize = 13.sp)
                     Text(item.cantidad, fontSize = 12.sp, color = TextMuted)
                 }
-                Text(formatoCLP(item.total), fontWeight = FontWeight.Bold, color = TextMain)
+                Text(formatoCLP(item.total), fontWeight = FontWeight.Bold, color = TextMain, fontSize = 12.sp)
+                TextButton(onClick = { onQuitarItem(index) }) { Text("Quitar", color = AccentRed, fontSize = 11.sp) }
             }
         }
 
