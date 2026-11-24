@@ -737,7 +737,6 @@ fun PresupuestoScreen(
     val totalMateriales = items.sumOf { it.total }
     val totalManoObra = manoDeObra.toIntOrNull()?.coerceAtLeast(0) ?: 0
     val granTotal = (totalMateriales.toLong() + totalManoObra.toLong()).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
-    var confirmarCobro by remember { mutableStateOf(false) }
     var confirmarNuevo by remember { mutableStateOf(false) }
     var presupuestoAEliminar by remember { mutableStateOf<Long?>(null) }
     var buscarPresupuesto by remember { mutableStateOf("") }
@@ -990,11 +989,11 @@ fun PresupuestoScreen(
         }
         item {
             OutlinedButton(
-                onClick = { confirmarCobro = true },
+                onClick = { onGuardarEnFinanzas(granTotal) },
                 modifier = Modifier.fillMaxWidth().height(48.dp),
                 shape = RoundedCornerShape(12.dp)
             ) {
-                Text("Registrar pago recibido", color = AccentGreen)
+                Text("Ir a Finanzas para registrar un cobro", color = AccentGreen)
             }
         }
     }
@@ -1025,15 +1024,6 @@ fun PresupuestoScreen(
                 onEliminar(id); presupuestoAEliminar = null; mensaje = "Presupuesto eliminado."
             }) { Text("Eliminar") } },
             dismissButton = { TextButton(onClick = { presupuestoAEliminar = null }) { Text("Cancelar") } })
-    }
-    if (confirmarCobro) {
-        AlertDialog(onDismissRequest = { confirmarCobro = false },
-            title = { Text("¿Recibiste el pago?") },
-            text = { Text("Registrar una cotización como ingreso altera el saldo. Confirma solamente si el cliente ya pagó el monto completo.") },
-            confirmButton = { Button(onClick = {
-                onGuardarEnFinanzas(granTotal); confirmarCobro = false
-            }) { Text("Sí, pago recibido") } },
-            dismissButton = { TextButton(onClick = { confirmarCobro = false }) { Text("Cancelar") } })
     }
 }
 
