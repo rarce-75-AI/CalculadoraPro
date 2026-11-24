@@ -294,9 +294,16 @@ fun CalculadoraProApp() {
                     categorias = categoriasPrecios,
                     unidades = unidadesPrecios,
                     onAgregar = { nuevosItems ->
-                        // Evitar modificar silenciosamente un presupuesto ya guardado.
-                        itemsPresupuesto.addAll(nuevosItems)
+                        val grupo = nuevosItems.firstOrNull()?.nombre?.split(" / ")?.take(2)?.joinToString(" / ")
+                        if (!grupo.isNullOrBlank()) {
+                            val prefijo = "$grupo / "
+                            itemsPresupuesto.removeAll { it.nombre.startsWith(prefijo) }
+                        }
+                        itemsPresupuesto.addAll(nuevosItems.distinctBy { it.nombre })
                         selectedTab = 2
+                    },
+                    yaAgregado = { grupo ->
+                        itemsPresupuesto.any { it.nombre.startsWith("$grupo / ") }
                     },
                     onCatalogo = { selectedTab = 3 }
                 )
@@ -320,6 +327,11 @@ fun CalculadoraProApp() {
                     onManoDeObraChange = { manoDeObra = it },
                     onQuitarItem = { index -> if (index in itemsPresupuesto.indices) itemsPresupuesto.removeAt(index) },
                     onVaciarItems = { itemsPresupuesto.clear() },
+                    onQuitarDuplicados = {
+                        val sinDuplicados = itemsPresupuesto.distinct()
+                        itemsPresupuesto.clear()
+                        itemsPresupuesto.addAll(sinDuplicados)
+                    },
                     onGuardarEnFinanzas = { totalFinal ->
                         movimientos.add(
                             0,
@@ -720,6 +732,7 @@ fun PresupuestoScreen(
     onManoDeObraChange: (String) -> Unit,
     onQuitarItem: (Int) -> Unit,
     onVaciarItems: () -> Unit,
+    onQuitarDuplicados: () -> Unit,
     onGuardarEnFinanzas: (Int) -> Unit
 ) {
     val context = LocalContext.current
@@ -751,6 +764,9 @@ fun PresupuestoScreen(
             "PDF guardado correctamente."
         }.getOrElse { "Error al exportar PDF: " + (it.message ?: "desconocido") }
     }
+    val nombrePartida = items.firstOrNull()?.nombre?.split(" / ")?.take(2)?.joinToString(" / ")
+        ?: "Sin trabajos agregados"
+    val duplicados = items.size - items.distinct().size
     val encontrados = presupuestosGuardados.filter {
         buscarPresupuesto.isBlank() ||
             it.cliente.contains(buscarPresupuesto, true) ||
@@ -763,8 +779,20 @@ fun PresupuestoScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            Text("Detalle de Presupuesto", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = TextMain)
-            Text("Guarda, busca y exporta cotizaciones por cliente.", fontSize = 13.sp, color = TextMuted)
+            Text("Detalle del presupuesto", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = TextMain)
+            Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF0F2922)),
+                modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.fillMaxWidth().padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(nombrePartida, fontSize = 17.sp, fontWeight = FontWeight.Bold, color = TextMain)
+                    if (items.map { it.nombre.split(" / ").take(2).joinToString(" / ") }.distinct().size > 1)
+                        Text("Incluye otras partidas del presupuesto", color = TextMuted, fontSize = 12.sp)
+                    Text("TOTAL PRESUPUESTADO", color = TextMuted, fontSize = 11.sp)
+                    Text(formatoCLP(granTotal), fontSize = 27.sp,
+                        fontWeight = FontWeight.ExtraBold, color = AccentGreen)
+                    Text("${items.size} materiales · mano de obra incluida", color = TextMuted, fontSize = 11.sp)
+                }
+            }
             if (mensaje.isNotBlank()) Text(mensaje, color = AccentAmber, fontSize = 12.sp)
         }
 
@@ -798,6 +826,8 @@ fun PresupuestoScreen(
         }
 
         item {
+            Text("GUARDAR ESTE PRESUPUESTO", color = AccentGreen,
+                fontWeight = FontWeight.Bold, fontSize = 13.sp)
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = {
                     if (cliente.isBlank()) mensaje = "Ingresa el nombre del cliente."
@@ -823,36 +853,17 @@ fun PresupuestoScreen(
             }
         }
         item {
-            HorizontalDivider(color = BorderSubtle)
-            Text("Presupuestos guardados", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-            OutlinedTextField(value = buscarPresupuesto, onValueChange = { buscarPresupuesto = it },
-                label = { Text("Buscar por cliente, obra o número") },
-                modifier = Modifier.fillMaxWidth(), singleLine = true)
-            Text("${encontrados.size} presupuesto(s) encontrado(s)", fontSize = 12.sp, color = TextMuted)
-        }
-        items(encontrados, key = { it.id }) { guardado ->
-            Card(colors = CardDefaults.cardColors(containerColor = BgCard)) {
-                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(guardado.cliente, fontWeight = FontWeight.SemiBold, color = TextMain)
-                    Text(guardado.obra + " · " + guardado.fecha + " · N° " + guardado.id,
-                        fontSize = 11.sp, color = TextMuted)
-                    Text(formatoCLP(guardado.total.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()), color = AccentGreen)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = { onAbrir(guardado.id); mensaje = "Presupuesto abierto." }) {
-                            Text("Abrir")
-                        }
-                        TextButton(onClick = { presupuestoAEliminar = guardado.id }) {
-                            Text("Eliminar", color = AccentRed)
-                        }
-                    }
-                }
-            }
-        }
-        item {
             Text(items.size.toString() + " materiales y partidas acumuladas",
                 fontSize = 12.sp, color = TextMuted)
+            if (duplicados > 0) {
+                Text("Se detectaron $duplicados materiales repetidos de versiones anteriores.",
+                    color = AccentAmber, fontSize = 12.sp)
+                OutlinedButton(onClick = onQuitarDuplicados) {
+                    Text("Eliminar $duplicados duplicados exactos")
+                }
+            }
             if (items.isNotEmpty()) {
-                TextButton(onClick = onVaciarItems) { Text("Vaciar presupuesto", color = AccentRed) }
+                TextButton(onClick = onVaciarItems) { Text("Vaciar borrador", color = AccentRed) }
             }
         }
         items(items.size) { index ->
@@ -870,19 +881,6 @@ fun PresupuestoScreen(
                 }
                 Text(formatoCLP(item.total), fontWeight = FontWeight.Bold, color = TextMain, fontSize = 12.sp)
                 TextButton(onClick = { onQuitarItem(index) }) { Text("Quitar", color = AccentRed, fontSize = 11.sp) }
-            }
-        }
-
-        item {
-            Card(
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF0F2922)),
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier.fillMaxWidth().border(1.dp, AccentGreen, RoundedCornerShape(14.dp))
-            ) {
-                Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Total Estimado Presupuesto", fontSize = 13.sp, color = TextMuted)
-                    Text(formatoCLP(granTotal), fontSize = 26.sp, fontWeight = FontWeight.ExtraBold, color = AccentGreen)
-                }
             }
         }
 
@@ -919,6 +917,32 @@ fun PresupuestoScreen(
             }
         }
 
+        item {
+            HorizontalDivider(color = BorderSubtle)
+            Text("Presupuestos guardados", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            OutlinedTextField(value = buscarPresupuesto, onValueChange = { buscarPresupuesto = it },
+                label = { Text("Buscar por cliente, obra o número") },
+                modifier = Modifier.fillMaxWidth(), singleLine = true)
+            Text("${encontrados.size} presupuesto(s) encontrado(s)", fontSize = 12.sp, color = TextMuted)
+        }
+        items(encontrados, key = { it.id }) { guardado ->
+            Card(colors = CardDefaults.cardColors(containerColor = BgCard)) {
+                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(guardado.cliente, fontWeight = FontWeight.SemiBold, color = TextMain)
+                    Text(guardado.obra + " · " + guardado.fecha + " · N° " + guardado.id,
+                        fontSize = 11.sp, color = TextMuted)
+                    Text(formatoCLP(guardado.total.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()), color = AccentGreen)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = { onAbrir(guardado.id); mensaje = "Presupuesto abierto." }) {
+                            Text("Abrir")
+                        }
+                        TextButton(onClick = { presupuestoAEliminar = guardado.id }) {
+                            Text("Eliminar", color = AccentRed)
+                        }
+                    }
+                }
+            }
+        }
         item {
             OutlinedButton(
                 onClick = { confirmarCobro = true },
