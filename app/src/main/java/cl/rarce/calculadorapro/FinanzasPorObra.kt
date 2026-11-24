@@ -32,7 +32,8 @@ data class ControlObra(
     val fechaInicio: String,
     val diasPlazo: Int,
     val anticipoPorcentaje: Int,
-    val estado: String = "En ejecución"
+    val estado: String = "En ejecución",
+    val avanceFisico: Int = 0
 )
 
 private fun formatoMontoObra(v: Long): String =
@@ -66,7 +67,8 @@ fun cargarControlObras(context: Context): List<ControlObra> = runCatching {
         val j = a.getJSONObject(i)
         ControlObra(j.getLong("presupuestoId"), j.getString("fechaInicio"),
             j.getInt("diasPlazo"), j.getInt("anticipoPorcentaje"),
-            j.optString("estado", "En ejecución"))
+            j.optString("estado", "En ejecución"),
+            j.optInt("avanceFisico", 0).coerceIn(0, 100))
     }
 }.getOrDefault(emptyList())
 
@@ -79,6 +81,7 @@ private fun persistirControlObras(context: Context, obras: List<ControlObra>) {
             put("diasPlazo", obra.diasPlazo)
             put("anticipoPorcentaje", obra.anticipoPorcentaje)
             put("estado", obra.estado)
+            put("avanceFisico", obra.avanceFisico)
         })
     }
     context.getSharedPreferences("calculadora_pro_v2", Context.MODE_PRIVATE).edit()
@@ -121,6 +124,7 @@ fun FinanzasPorObraScreen(
     var plazoInput by remember { mutableStateOf("14") }
     var anticipoInput by remember { mutableStateOf("25") }
     var estadoInput by remember { mutableStateOf("En ejecución") }
+    var avanceInput by remember { mutableStateOf("0") }
     var descripcionInput by remember { mutableStateOf("") }
     var montoInput by remember { mutableStateOf("") }
     var ingresoInput by remember { mutableStateOf(true) }
@@ -143,11 +147,13 @@ fun FinanzasPorObraScreen(
         val p = presupuestos.find { it.id == presupuestoElegidoId }
         val plazo = plazoInput.toIntOrNull()
         val anticipo = anticipoInput.toIntOrNull()
+        val avance = avanceInput.toIntOrNull()
         when {
             p == null -> aviso = "Elige un presupuesto guardado."
             fechaObraValida(fechaInput) == null -> aviso = "Fecha inválida. Usa DD/MM/AAAA."
             plazo == null || plazo <= 0 || plazo > 3650 -> aviso = "Plazo inválido (1 a 3650 días)."
             anticipo == null || anticipo !in 0..100 -> aviso = "Anticipo debe estar entre 0% y 100%."
+            avance == null || avance !in 0..100 -> aviso = "Avance físico debe estar entre 0% y 100%."
             else -> {
                 val nuevaObra = controles.none { it.presupuestoId == p.id }
                 val montoAnticipo = (p.total * anticipo!! / 100L)
@@ -155,7 +161,7 @@ fun FinanzasPorObraScreen(
                     aviso = "Anticipo demasiado alto para registrarlo. Revisa el monto."
                 } else {
                     controles.removeAll { it.presupuestoId == p.id }
-                    controles.add(ControlObra(p.id, fechaInput, plazo!!, anticipo!!, estadoInput))
+                    controles.add(ControlObra(p.id, fechaInput, plazo!!, anticipo!!, estadoInput, avance!!))
                     persistirControlObras(context, controles)
                     if (nuevaObra && anticipoRecibido && montoAnticipo > 0) {
                         movimientos.add(0, MovimientoObra(
@@ -257,6 +263,10 @@ fun FinanzasPorObraScreen(
                         else -> "Días restantes: $faltanDias"
                     }, color = if (faltanDias != null && faltanDias < 0 && control.estado != "Terminada") AccentRed else AccentGreen)
                     Text("Estado: " + control.estado, color = TextMuted, fontSize = 12.sp)
+                    LinearProgressIndicator(progress = { control.avanceFisico / 100f },
+                        modifier = Modifier.fillMaxWidth().height(7.dp), color = AccentGreen)
+                    Text("Avance físico declarado: " + control.avanceFisico + "%",
+                        color = TextMuted, fontSize = 12.sp)
                     HorizontalDivider(color = BorderSubtle)
                     Text("Anticipo pactado: " + control.anticipoPorcentaje + "% = " + formatoMontoObra(anticipoExigido),
                         color = TextMain)
@@ -273,6 +283,7 @@ fun FinanzasPorObraScreen(
                         plazoInput = control.diasPlazo.toString()
                         anticipoInput = control.anticipoPorcentaje.toString()
                         estadoInput = control.estado
+                        avanceInput = control.avanceFisico.toString()
                         anticipoRecibido = false
                         mostrarConfig = true
                     }, contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)) {
@@ -304,7 +315,8 @@ fun FinanzasPorObraScreen(
                         controles.none { it.presupuestoId == p.id }
                     }?.id ?: 0L
                     fechaInput = hoyObra(); plazoInput = "14"; anticipoInput = "25"
-                    estadoInput = "En ejecución"; anticipoRecibido = true; mostrarConfig = true
+                    estadoInput = "En ejecución"; avanceInput = "0"
+                anticipoRecibido = true; mostrarConfig = true
                 }, modifier = Modifier.weight(1f).height(40.dp),
                     contentPadding = PaddingValues(horizontal = 8.dp)) {
                     Icon(Icons.Default.Construction, contentDescription = null,
@@ -396,6 +408,10 @@ fun FinanzasPorObraScreen(
                                 label = { Text("$porcentaje%") })
                         }
                     }
+                    OutlinedTextField(avanceInput, { avanceInput = it },
+                        label = { Text("Avance físico estimado (%)") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
                     Text("Estado de la obra:")
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         listOf("En ejecución", "Terminada").forEach { st ->
