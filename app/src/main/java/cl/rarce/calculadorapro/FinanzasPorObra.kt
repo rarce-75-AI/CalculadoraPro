@@ -85,6 +85,9 @@ private fun persistirControlObras(context: Context, obras: List<ControlObra>) {
         .putString("control_obras_v1", a.toString()).apply()
 }
 
+fun presupuestoConObraIniciada(context: Context, presupuestoId: Long): Boolean =
+    cargarControlObras(context).any { it.presupuestoId == presupuestoId }
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FinanzasPorObraScreen(
@@ -98,7 +101,15 @@ fun FinanzasPorObraScreen(
     val activas = controles.mapNotNull { control ->
         presupuestos.find { it.id == control.presupuestoId }?.let { it to control }
     }
-    var obraSeleccionadaId by remember { mutableLongStateOf(0L) }
+    val prefsVista = remember(context) {
+        context.getSharedPreferences("calculadora_pro_v2", Context.MODE_PRIVATE)
+    }
+    var obraSeleccionadaId by remember {
+        mutableLongStateOf(prefsVista.getLong("finanzas_obra_seleccionada", 0L))
+    }
+    LaunchedEffect(obraSeleccionadaId) {
+        prefsVista.edit().putLong("finanzas_obra_seleccionada", obraSeleccionadaId).apply()
+    }
     val activa = activas.find { it.first.id == obraSeleccionadaId }
     var abrirSelector by remember { mutableStateOf(false) }
     var mostrarConfig by remember { mutableStateOf(false) }
