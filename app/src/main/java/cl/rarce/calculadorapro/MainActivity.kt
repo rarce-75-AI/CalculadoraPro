@@ -132,7 +132,10 @@ fun CalculadoraProApp() {
             "Plancha Zinc Acanalada" to 9800,
             "Ladrillo Fiscal / Princesa" to 750,
             "Cemento 25kg (saco)" to 5800,
-            "Costanera 6m (tira)" to 4800
+            "Costanera 6m (tira)" to 4800,
+            "Arena para hormigón (m³)" to 0,
+            "Grava para hormigón (m³)" to 0,
+            "Malla electrosoldada (m²)" to 0
         ).apply {
             runCatching {
                 val saved = JSONObject(prefs.getString("precios", "{}"))
@@ -150,7 +153,9 @@ fun CalculadoraProApp() {
                 this[key] = saved.optString(key, when {
                     key.contains("Cerámica", true) || key.contains("Bekrón", true) ||
                         key.contains("Fragüe", true) -> "Cerámicas y pisos"
-                    key.contains("Cemento", true) || key.contains("Ladrillo", true) -> "Hormigón y áridos"
+                    key.contains("Cemento", true) || key.contains("Ladrillo", true) ||
+                        key.contains("Arena", true) || key.contains("Grava", true) ||
+                        key.contains("Malla electrosoldada", true) -> "Hormigón y áridos"
                     key.contains("Volcanita", true) || key.contains("Metalcon", true) -> "Tabiquería"
                     key.contains("Zinc", true) || key.contains("Costanera", true) -> "Techumbres"
                     else -> "Otros"
@@ -164,6 +169,7 @@ fun CalculadoraProApp() {
             preciosBase.keys.forEach { key ->
                 this[key] = saved.optString(key, when {
                     key.contains("m²") -> "m²"
+                    key.contains("m³") -> "m³"
                     key.contains("saco", true) -> "saco"
                     key.contains("bolsa", true) -> "bolsa"
                     key.contains("tira", true) -> "tira"
