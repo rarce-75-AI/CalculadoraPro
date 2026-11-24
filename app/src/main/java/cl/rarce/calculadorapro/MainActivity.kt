@@ -764,7 +764,7 @@ fun PresupuestoScreen(
             "PDF guardado correctamente."
         }.getOrElse { "Error al exportar PDF: " + (it.message ?: "desconocido") }
     }
-    val nombrePartida = items.firstOrNull()?.nombre?.split(" / ")?.take(2)?.joinToString(" / ")
+    val nombrePartida = items.firstOrNull()?.nombre?.split(" / ")?.take(2)?.joinToString(" · ")
         ?: "Sin trabajos agregados"
     val duplicados = items.size - items.distinct().size
     val encontrados = presupuestosGuardados.filter {
