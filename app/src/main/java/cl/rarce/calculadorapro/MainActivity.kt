@@ -303,7 +303,7 @@ fun FinanzasObraScreen(movimientos: MutableList<MovimientoObra>) {
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            Text("Calculadora Pro", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = TextMain)
+            Text("Cálculo de Obra", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = TextMain)
             Text("Control de pagos realmente recibidos y gastos. Datos guardados en este teléfono.", fontSize = 12.sp, color = TextMuted)
         }
 
