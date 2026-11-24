@@ -219,7 +219,7 @@ fun CalculadoraProApp() {
                 val navItems = listOf(
                     Triple("Finanzas", Icons.Default.AccountBalanceWallet, 0),
                     Triple("Trabajos", Icons.Default.Calculate, 1),
-                    Triple("Ppto.", Icons.Default.Description, 2),
+                    Triple("Presupuesto", Icons.Default.Description, 2),
                     Triple("Precios", Icons.Default.Inventory, 3)
                 )
                 navItems.forEach { (label, icon, index) ->
@@ -227,7 +227,8 @@ fun CalculadoraProApp() {
                         selected = selectedTab == index,
                         onClick = { selectedTab = index },
                         icon = { Icon(icon, contentDescription = label) },
-                        label = { Text(label, fontSize = 11.sp) },
+                        label = { Text(label, fontSize = if (index == 2) 9.sp else 11.sp, maxLines = 1, softWrap = false) },
+                        alwaysShowLabel = true,
                         colors = NavigationBarItemDefaults.colors(
                             selectedIconColor = AccentGreen,
                             selectedTextColor = AccentGreen,
