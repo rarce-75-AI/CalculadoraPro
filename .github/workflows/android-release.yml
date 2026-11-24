@@ -1,0 +1,62 @@
+name: Compilar CalculadoraPro APK y AAB
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Preparar Android SDK API 36
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;35.0.0"
+      - name: Configurar firma privada
+        env:
+          CALCPRO_KEYSTORE_B64: ${{ secrets.CALCPRO_KEYSTORE_B64 }}
+          CALCPRO_STORE_PASSWORD: ${{ secrets.CALCPRO_STORE_PASSWORD }}
+          CALCPRO_KEY_ALIAS: ${{ secrets.CALCPRO_KEY_ALIAS }}
+          CALCPRO_KEY_PASSWORD: ${{ secrets.CALCPRO_KEY_PASSWORD }}
+        run: |
+          test -n "$CALCPRO_KEYSTORE_B64" || { echo "Falta CALCPRO_KEYSTORE_B64"; exit 1; }
+          test -n "$CALCPRO_STORE_PASSWORD" || { echo "Falta CALCPRO_STORE_PASSWORD"; exit 1; }
+          test -n "$CALCPRO_KEY_ALIAS" || { echo "Falta CALCPRO_KEY_ALIAS"; exit 1; }
+          test -n "$CALCPRO_KEY_PASSWORD" || { echo "Falta CALCPRO_KEY_PASSWORD"; exit 1; }
+          printf '%s' "$CALCPRO_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/calculadorapro-release.jks"
+          echo "CALCPRO_KEYSTORE_PATH=$RUNNER_TEMP/calculadorapro-release.jks" >> "$GITHUB_ENV"
+          echo "CALCPRO_STORE_PASSWORD=$CALCPRO_STORE_PASSWORD" >> "$GITHUB_ENV"
+          echo "CALCPRO_KEY_ALIAS=$CALCPRO_KEY_ALIAS" >> "$GITHUB_ENV"
+          echo "CALCPRO_KEY_PASSWORD=$CALCPRO_KEY_PASSWORD" >> "$GITHUB_ENV"
+      - name: Compilar APK y AAB firmados
+        run: gradle --no-daemon :app:assembleRelease :app:bundleRelease
+      - name: Verificar identidad y firma de los paquetes
+        run: |
+          test -s app/build/outputs/apk/release/app-release.apk
+          test -s app/build/outputs/bundle/release/app-release.aab
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose app/build/outputs/apk/release/app-release.apk
+          jarsigner -verify app/build/outputs/bundle/release/app-release.aab
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging app/build/outputs/apk/release/app-release.apk | grep -E '^package:|^application-label:'
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging app/build/outputs/apk/release/app-release.apk | grep -q "name='cl.rarce.calculadorapro'"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging app/build/outputs/apk/release/app-release.apk | grep -q "versionCode='3'"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging app/build/outputs/apk/release/app-release.apk | grep -q "targetSdkVersion:'36'"
+      - name: Publicar en GitHub Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "calculadorapro-v0.3.0" \
+            app/build/outputs/apk/release/app-release.apk#CalculadoraPro-v0.3.0.apk \
+            app/build/outputs/bundle/release/app-release.aab#CalculadoraPro-v0.3.0.aab \
+            --target "$GITHUB_SHA" \
+            --title "CalculadoraPro v0.3.0 · APK + AAB firmados" \
+            --notes "Compilación firmada para pruebas. Verificar instalación y funcionamiento antes de usar Play Store." \
+            --prerelease
