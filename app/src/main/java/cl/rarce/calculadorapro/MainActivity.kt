@@ -2,6 +2,8 @@ package cl.rarce.calculadorapro
 
 import android.content.Context
 import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import android.os.Bundle
 import org.json.JSONArray
 import org.json.JSONObject
@@ -118,7 +120,43 @@ fun CalculadoraProApp() {
         }
     }
     var nombreCliente by remember { mutableStateOf(prefs.getString("cliente", "") ?: "") }
+    var nombreObra by remember { mutableStateOf(prefs.getString("nombre_obra", "") ?: "") }
     var manoDeObra by remember { mutableStateOf(prefs.getString("manoDeObra", "0") ?: "0") }
+    var presupuestoActivoId by remember { mutableStateOf(prefs.getLong("presupuesto_activo_id", 0L)) }
+    val presupuestosGuardados = remember {
+        mutableStateListOf<PresupuestoGuardado>().apply { addAll(cargarPresupuestos(context)) }
+    }
+    fun guardarActual() {
+        require(nombreCliente.isNotBlank()) { "Ingresa un cliente para guardar." }
+        val id = if (presupuestoActivoId == 0L) System.currentTimeMillis() else presupuestoActivoId
+        val anterior = presupuestosGuardados.find { it.id == id }
+        val guardado = PresupuestoGuardado(
+            id = id, cliente = nombreCliente.trim(), obra = nombreObra.trim(),
+            fecha = anterior?.fecha ?: fechaPresupuesto(),
+            manoDeObra = manoDeObra.toIntOrNull()?.coerceAtLeast(0) ?: 0,
+            partidas = itemsPresupuesto.toList()
+        )
+        presupuestosGuardados.removeAll { it.id == id }
+        presupuestosGuardados.add(0, guardado)
+        presupuestoActivoId = id
+        guardarPresupuestos(context, presupuestosGuardados)
+    }
+    fun abrirGuardado(id: Long) {
+        val guardado = presupuestosGuardados.find { it.id == id } ?: return
+        presupuestoActivoId = guardado.id
+        nombreCliente = guardado.cliente
+        nombreObra = guardado.obra
+        manoDeObra = guardado.manoDeObra.toString()
+        itemsPresupuesto.clear()
+        itemsPresupuesto.addAll(guardado.partidas)
+    }
+    fun crearNuevoPresupuesto() {
+        presupuestoActivoId = 0L
+        nombreCliente = ""
+        nombreObra = ""
+        manoDeObra = "0"
+        itemsPresupuesto.clear()
+    }
 
     // Lista de Precios Base Editables (Chile)
     val preciosBase = remember {
@@ -211,8 +249,9 @@ fun CalculadoraProApp() {
         preciosBase.forEach { (name, price) -> data.put(name, price) }
         prefs.edit().putString("precios", data.toString()).apply()
     }
-    LaunchedEffect(nombreCliente, manoDeObra) {
-        prefs.edit().putString("cliente", nombreCliente).putString("manoDeObra", manoDeObra).apply()
+    LaunchedEffect(nombreCliente, nombreObra, manoDeObra, presupuestoActivoId) {
+        prefs.edit().putString("cliente", nombreCliente).putString("nombre_obra", nombreObra)
+            .putString("manoDeObra", manoDeObra).putLong("presupuesto_activo_id", presupuestoActivoId).apply()
     }
 
     Scaffold(
@@ -255,6 +294,7 @@ fun CalculadoraProApp() {
                     categorias = categoriasPrecios,
                     unidades = unidadesPrecios,
                     onAgregar = { nuevosItems ->
+                        // Evitar modificar silenciosamente un presupuesto ya guardado.
                         itemsPresupuesto.addAll(nuevosItems)
                         selectedTab = 2
                     },
@@ -263,6 +303,18 @@ fun CalculadoraProApp() {
                 2 -> PresupuestoScreen(
                     cliente = nombreCliente,
                     onClienteChange = { nombreCliente = it },
+                    obra = nombreObra,
+                    onObraChange = { nombreObra = it },
+                    presupuestoActivoId = presupuestoActivoId,
+                    presupuestosGuardados = presupuestosGuardados,
+                    onGuardar = { guardarActual() },
+                    onNuevo = { crearNuevoPresupuesto() },
+                    onAbrir = { abrirGuardado(it) },
+                    onEliminar = { id ->
+                        presupuestosGuardados.removeAll { it.id == id }
+                        guardarPresupuestos(context, presupuestosGuardados)
+                        if (presupuestoActivoId == id) presupuestoActivoId = 0L
+                    },
                     items = itemsPresupuesto,
                     manoDeObra = manoDeObra,
                     onManoDeObraChange = { manoDeObra = it },
@@ -655,6 +707,14 @@ fun CalculadorasScreen(
 fun PresupuestoScreen(
     cliente: String,
     onClienteChange: (String) -> Unit,
+    obra: String,
+    onObraChange: (String) -> Unit,
+    presupuestoActivoId: Long,
+    presupuestosGuardados: List<PresupuestoGuardado>,
+    onGuardar: () -> Unit,
+    onNuevo: () -> Unit,
+    onAbrir: (Long) -> Unit,
+    onEliminar: (Long) -> Unit,
     items: List<MaterialItem>,
     manoDeObra: String,
     onManoDeObraChange: (String) -> Unit,
@@ -667,6 +727,36 @@ fun PresupuestoScreen(
     val totalManoObra = manoDeObra.toIntOrNull()?.coerceAtLeast(0) ?: 0
     val granTotal = (totalMateriales.toLong() + totalManoObra.toLong()).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
     var confirmarCobro by remember { mutableStateOf(false) }
+    var confirmarNuevo by remember { mutableStateOf(false) }
+    var presupuestoAEliminar by remember { mutableStateOf<Long?>(null) }
+    var buscarPresupuesto by remember { mutableStateOf("") }
+    var mensaje by remember { mutableStateOf("") }
+    val presupuestoActual = PresupuestoGuardado(
+        presupuestoActivoId.takeIf { it != 0L } ?: System.currentTimeMillis(),
+        cliente.trim(), obra.trim(), fechaPresupuesto(), totalManoObra, items.toList()
+    )
+    val excelLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    ) { uri ->
+        if (uri != null) mensaje = runCatching {
+            exportarPresupuestoExcel(context, uri, presupuestoActual)
+            "Excel guardado correctamente."
+        }.getOrElse { "Error al exportar Excel: " + (it.message ?: "desconocido") }
+    }
+    val pdfLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/pdf")
+    ) { uri ->
+        if (uri != null) mensaje = runCatching {
+            exportarPresupuestoPdf(context, uri, presupuestoActual)
+            "PDF guardado correctamente."
+        }.getOrElse { "Error al exportar PDF: " + (it.message ?: "desconocido") }
+    }
+    val encontrados = presupuestosGuardados.filter {
+        buscarPresupuesto.isBlank() ||
+            it.cliente.contains(buscarPresupuesto, true) ||
+            it.obra.contains(buscarPresupuesto, true) ||
+            it.id.toString().contains(buscarPresupuesto)
+    }.sortedByDescending { it.id }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(16.dp),
@@ -674,7 +764,8 @@ fun PresupuestoScreen(
     ) {
         item {
             Text("Detalle de Presupuesto", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = TextMain)
-            Text("Cotización lista para compartir con tu cliente", fontSize = 13.sp, color = TextMuted)
+            Text("Guarda, busca y exporta cotizaciones por cliente.", fontSize = 13.sp, color = TextMuted)
+            if (mensaje.isNotBlank()) Text(mensaje, color = AccentAmber, fontSize = 12.sp)
         }
 
         item {
@@ -687,10 +778,13 @@ fun PresupuestoScreen(
                     OutlinedTextField(
                         value = cliente,
                         onValueChange = onClienteChange,
-                        label = { Text("Cliente / Nombre de Obra") },
+                        label = { Text("Nombre del cliente") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
                     )
+                    OutlinedTextField(value = obra, onValueChange = onObraChange,
+                        label = { Text("Nombre / Dirección de la obra") },
+                        modifier = Modifier.fillMaxWidth(), singleLine = true)
                     OutlinedTextField(
                         value = manoDeObra,
                         onValueChange = onManoDeObraChange,
@@ -703,6 +797,57 @@ fun PresupuestoScreen(
             }
         }
 
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = {
+                    if (cliente.isBlank()) mensaje = "Ingresa el nombre del cliente."
+                    else { onGuardar(); mensaje = "Presupuesto guardado en este teléfono." }
+                }, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Default.Save, contentDescription = null)
+                    Spacer(Modifier.width(6.dp))
+                    Text(if (presupuestoActivoId == 0L) "Guardar presupuesto" else "Actualizar presupuesto guardado")
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = {
+                        if (cliente.isBlank()) mensaje = "Indica el cliente antes de exportar."
+                        else excelLauncher.launch("Presupuesto_" + cliente.replace(Regex("[^a-zA-Z0-9_-]"), "_").take(35) + ".xlsx")
+                    }, modifier = Modifier.weight(1f)) { Text("Excel .xlsx") }
+                    OutlinedButton(onClick = {
+                        if (cliente.isBlank()) mensaje = "Indica el cliente antes de exportar."
+                        else pdfLauncher.launch("Presupuesto_" + cliente.replace(Regex("[^a-zA-Z0-9_-]"), "_").take(35) + ".pdf")
+                    }, modifier = Modifier.weight(1f)) { Text("PDF") }
+                }
+                OutlinedButton(onClick = { confirmarNuevo = true }, modifier = Modifier.fillMaxWidth()) {
+                    Text("+ Nuevo presupuesto")
+                }
+            }
+        }
+        item {
+            HorizontalDivider(color = BorderSubtle)
+            Text("Presupuestos guardados", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            OutlinedTextField(value = buscarPresupuesto, onValueChange = { buscarPresupuesto = it },
+                label = { Text("Buscar por cliente, obra o número") },
+                modifier = Modifier.fillMaxWidth(), singleLine = true)
+            Text("${encontrados.size} presupuesto(s) encontrado(s)", fontSize = 12.sp, color = TextMuted)
+        }
+        items(encontrados, key = { it.id }) { guardado ->
+            Card(colors = CardDefaults.cardColors(containerColor = BgCard)) {
+                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(guardado.cliente, fontWeight = FontWeight.SemiBold, color = TextMain)
+                    Text(guardado.obra + " · " + guardado.fecha + " · N° " + guardado.id,
+                        fontSize = 11.sp, color = TextMuted)
+                    Text(formatoCLP(guardado.total.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()), color = AccentGreen)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = { onAbrir(guardado.id); mensaje = "Presupuesto abierto." }) {
+                            Text("Abrir")
+                        }
+                        TextButton(onClick = { presupuestoAEliminar = guardado.id }) {
+                            Text("Eliminar", color = AccentRed)
+                        }
+                    }
+                }
+            }
+        }
         item {
             Text(items.size.toString() + " materiales y partidas acumuladas",
                 fontSize = 12.sp, color = TextMuted)
@@ -781,6 +926,24 @@ fun PresupuestoScreen(
                 Text("Registrar pago recibido", color = AccentGreen)
             }
         }
+    }
+    if (confirmarNuevo) {
+        AlertDialog(onDismissRequest = { confirmarNuevo = false },
+            title = { Text("¿Crear nuevo presupuesto?") },
+            text = { Text("Se limpiará el borrador actual. Guarda primero si quieres conservarlo.") },
+            confirmButton = { Button(onClick = {
+                onNuevo(); confirmarNuevo = false; mensaje = "Nuevo presupuesto listo."
+            }) { Text("Crear nuevo") } },
+            dismissButton = { TextButton(onClick = { confirmarNuevo = false }) { Text("Cancelar") } })
+    }
+    presupuestoAEliminar?.let { id ->
+        AlertDialog(onDismissRequest = { presupuestoAEliminar = null },
+            title = { Text("Eliminar presupuesto guardado") },
+            text = { Text("Se eliminará del listado local. No elimina archivos exportados.") },
+            confirmButton = { Button(onClick = {
+                onEliminar(id); presupuestoAEliminar = null; mensaje = "Presupuesto eliminado."
+            }) { Text("Eliminar") } },
+            dismissButton = { TextButton(onClick = { presupuestoAEliminar = null }) { Text("Cancelar") } })
     }
     if (confirmarCobro) {
         AlertDialog(onDismissRequest = { confirmarCobro = false },
