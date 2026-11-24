@@ -3,7 +3,7 @@
 
     <application
         android:allowBackup="true"
-        android:label="Calculadora Pro"
+        android:label="Calculadora de Obra"
         android:supportsRtl="true"
         android:theme="@style/Theme.CalculadoraPro">
         <activity
