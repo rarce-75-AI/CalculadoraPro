@@ -432,7 +432,7 @@ fun FinanzasPorObraScreen(
             title = { Text("Movimiento · " + activa.first.cliente) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         FilterChip(selected = ingresoInput,
                             onClick = { ingresoInput = true },
                             label = { Text("Cobro / abono") })
@@ -440,17 +440,45 @@ fun FinanzasPorObraScreen(
                             onClick = { ingresoInput = false },
                             label = { Text("Gasto") })
                     }
-                    if (ingresoInput) Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                        listOf("Anticipo", "Abono cliente", "Pago final").forEach { tipo ->
-                            FilterChip(selected = tipoIngreso == tipo, onClick = { tipoIngreso = tipo },
-                                label = { Text(tipo, fontSize = 11.sp) })
+                    if (ingresoInput) {
+                        Text("Tipo de pago", fontSize = 12.sp, color = TextMuted)
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            listOf("Anticipo", "Abono cliente", "Pago final").forEach { tipo ->
+                                val texto = when (tipo) {
+                                    "Abono cliente" -> "Abono"
+                                    "Pago final" -> "Final"
+                                    else -> "Anticipo"
+                                }
+                                FilterChip(
+                                    selected = tipoIngreso == tipo,
+                                    onClick = {
+                                        tipoIngreso = tipo
+                                        val pagado = movimientos.filter {
+                                            it.obraId == activa.first.id && it.esIngreso
+                                        }.sumOf { it.monto.toLong() }
+                                        if (tipo == "Pago final") {
+                                            montoInput = (activa.first.total - pagado).coerceAtLeast(0L).toString()
+                                            descripcionInput = "Pago final de la obra"
+                                        } else if (tipo == "Anticipo") {
+                                            descripcionInput = "Anticipo / adelanto de obra"
+                                        } else {
+                                            descripcionInput = "Abono del cliente"
+                                            montoInput = ""
+                                        }
+                                    },
+                                    label = { Text(texto, fontSize = 11.sp, maxLines = 1) },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
                         }
                     }
                     OutlinedTextField(descripcionInput, { descripcionInput = it },
-                        label = { Text("Detalle del movimiento") }, singleLine = true)
+                        label = { Text("Detalle del movimiento") }, singleLine = true,
+                        modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(montoInput, { montoInput = it },
-                        label = { Text("Monto efectivamente recibido / pagado (CLP)") },
-                        singleLine = true,
+                        label = { Text(if (ingresoInput) "Monto efectivamente recibido (CLP)"
+                            else "Monto efectivamente pagado (CLP)") },
+                        singleLine = true, modifier = Modifier.fillMaxWidth(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
                     Text("El movimiento quedará asociado solo a esta obra.", color = TextMuted, fontSize = 11.sp)
                 }
