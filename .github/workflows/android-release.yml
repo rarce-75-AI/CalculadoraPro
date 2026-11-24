@@ -55,10 +55,19 @@ jobs:
         run: |
           cp app/build/outputs/apk/release/app-release.apk Calculadora-de-Obra-v0.4.9.apk
           cp app/build/outputs/bundle/release/app-release.aab Calculadora-de-Obra-v0.4.9.aab
-          gh release create "calculadora-de-obra-v0.4.9" \
-            Calculadora-de-Obra-v0.4.9.apk \
-            Calculadora-de-Obra-v0.4.9.aab \
-            --target "$GITHUB_SHA" \
-            --title "Cálculo de Obra v0.4.9 · APK + AAB firmados" \
-            --notes "Compilación firmada para pruebas. Verificar instalación y funcionamiento antes de usar Play Store." \
-            --prerelease
+          TAG="calculadora-de-obra-v0.4.9"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "La versión ya existe: actualizar APK y AAB sin duplicar la publicación."
+            gh release upload "$TAG" \
+              Calculadora-de-Obra-v0.4.9.apk \
+              Calculadora-de-Obra-v0.4.9.aab \
+              --clobber
+          else
+            gh release create "$TAG" \
+              Calculadora-de-Obra-v0.4.9.apk \
+              Calculadora-de-Obra-v0.4.9.aab \
+              --target "$GITHUB_SHA" \
+              --title "Cálculo de Obra v0.4.9 · APK + AAB firmados" \
+              --notes "Compilación firmada para pruebas. Verificar instalación y funcionamiento antes de usar Play Store." \
+              --prerelease
+          fi
