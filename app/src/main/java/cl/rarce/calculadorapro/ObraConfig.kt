@@ -171,6 +171,7 @@ fun ConfiguradorObraScreen(
     categorias: Map<String, String>,
     unidades: Map<String, String>,
     onAgregar: (List<MaterialItem>) -> Unit,
+    yaAgregado: (String) -> Boolean,
     onCatalogo: () -> Unit
 ) {
     // Borrador persistente: no se pierde al cambiar entre Trabajos, Precios y Presupuesto.
@@ -289,6 +290,8 @@ fun ConfiguradorObraScreen(
         incluirSugerido[key] != false
     }
     val partidasFinales = sugeridosElegidos + partidas
+    val grupoActual = "$trabajo / $solucionActual"
+    val existeEnPresupuesto = yaAgregado(grupoActual)
     val total = partidasFinales.sumOf { it.total.toLong() }
     val nombresSugeridos = sugerenciasRadier.map { it.nombre.substringAfterLast(" / ") }.toSet()
     val visibles = precios.keys.filter { key ->
@@ -469,8 +472,13 @@ fun ConfiguradorObraScreen(
                 enabled = valido && partidasFinales.isNotEmpty() &&
                     partidas.size == consumos.size && total <= Int.MAX_VALUE &&
                     (trabajo != "Radier" || datosDosificacionValidos)) {
-                Text("Agregar partida al presupuesto")
+                Text(if (existeEnPresupuesto) "Actualizar este trabajo en presupuesto"
+                     else "Agregar este trabajo al presupuesto")
             }
+            Text(if (existeEnPresupuesto)
+                    "Este trabajo ya existe: al pulsar se reemplazarán sus materiales, NO se sumará otra copia."
+                 else "Esta acción agrega la partida al borrador; para guardarlo, entra a Presupuesto y pulsa GUARDAR.",
+                color = AccentAmber, fontSize = 12.sp)
             Text("Cubicación orientativa. Verifica espesores, formato comercial y consumo del fabricante.",
                 fontSize = 11.sp, color = TextMuted)
         }
