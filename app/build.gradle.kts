@@ -11,8 +11,8 @@ android {
         applicationId = "cl.rarce.calculadorapro"
         minSdk = 24
         targetSdk = 36
-        versionCode = 13
-        versionName = "0.4.9"
+        versionCode = 14
+        versionName = "0.5.0"
 
         vectorDrawables {
             useSupportLibrary = true
