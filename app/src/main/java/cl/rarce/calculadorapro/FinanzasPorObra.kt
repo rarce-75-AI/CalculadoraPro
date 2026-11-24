@@ -91,6 +91,16 @@ private fun persistirControlObras(context: Context, obras: List<ControlObra>) {
 fun presupuestoConObraIniciada(context: Context, presupuestoId: Long): Boolean =
     cargarControlObras(context).any { it.presupuestoId == presupuestoId }
 
+/** Elimina solo el vínculo de obra; el presupuesto y sus partidas permanecen intactos. */
+fun eliminarObraRegistrada(context: Context, presupuestoId: Long) {
+    val otras = cargarControlObras(context).filterNot { it.presupuestoId == presupuestoId }
+    persistirControlObras(context, otras)
+    val prefs = context.getSharedPreferences("calculadora_pro_v2", Context.MODE_PRIVATE)
+    if (prefs.getLong("finanzas_obra_seleccionada", 0L) == presupuestoId) {
+        prefs.edit().putLong("finanzas_obra_seleccionada", 0L).apply()
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FinanzasPorObraScreen(
@@ -118,6 +128,7 @@ fun FinanzasPorObraScreen(
     var mostrarConfig by remember { mutableStateOf(false) }
     var mostrarMovimiento by remember { mutableStateOf(false) }
     var mostrarConfirmacionEliminar by remember { mutableStateOf<Long?>(null) }
+    var obraAEliminar by remember { mutableStateOf<Long?>(null) }
     var aviso by remember { mutableStateOf("") }
     var presupuestoElegidoId by remember { mutableLongStateOf(0L) }
     var fechaInput by remember { mutableStateOf(hoyObra()) }
@@ -291,6 +302,14 @@ fun FinanzasPorObraScreen(
                             modifier = Modifier.size(15.dp))
                         Spacer(Modifier.width(4.dp))
                         Text("Editar condiciones", fontSize = 12.sp)
+                    }
+
+                    TextButton(onClick = { obraAEliminar = presupuesto.id },
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)) {
+                        Icon(Icons.Default.DeleteOutline, contentDescription = null,
+                            modifier = Modifier.size(15.dp), tint = AccentRed)
+                        Spacer(Modifier.width(4.dp))
+                        Text("Eliminar obra", color = AccentRed, fontSize = 12.sp)
                     }
                 }
             }
@@ -515,6 +534,33 @@ fun FinanzasPorObraScreen(
                 }
             }) { Text("Guardar movimiento") } },
             dismissButton = { TextButton(onClick = { mostrarMovimiento = false }) { Text("Cancelar") } }
+        )
+    }
+    obraAEliminar?.let { id ->
+        val presupuesto = presupuestos.find { it.id == id }
+        val movimientosObra = movimientos.filter { it.obraId == id }
+        AlertDialog(
+            onDismissRequest = { obraAEliminar = null },
+            title = { Text("Eliminar obra y sus movimientos") },
+            text = {
+                Text("Se eliminará el control de la obra " +
+                    (presupuesto?.obra?.ifBlank { presupuesto.cliente } ?: "") +
+                    " y sus ${movimientosObra.size} movimientos financieros (abonos y gastos). " +
+                    "Esta acción no se puede deshacer. El presupuesto original permanecerá guardado.")
+            },
+            confirmButton = {
+                Button(onClick = {
+                    movimientos.removeAll { it.obraId == id }
+                    eliminarObraRegistrada(context, id)
+                    controles.removeAll { it.presupuestoId == id }
+                    obraSeleccionadaId = 0L
+                    obraAEliminar = null
+                    aviso = "Obra y sus movimientos eliminados. El presupuesto continúa disponible."
+                }, colors = ButtonDefaults.buttonColors(containerColor = AccentRed)) {
+                    Text("Eliminar definitivamente")
+                }
+            },
+            dismissButton = { TextButton(onClick = { obraAEliminar = null }) { Text("Cancelar") } }
         )
     }
     mostrarConfirmacionEliminar?.let { id ->
