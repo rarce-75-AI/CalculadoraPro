@@ -62,7 +62,8 @@ data class MovimientoObra(
     val titulo: String,
     val categoria: String,
     val monto: Int,
-    val esIngreso: Boolean
+    val esIngreso: Boolean,
+    val obraId: Long = 0L
 )
 
 fun formatoCLP(valor: Int): String {
@@ -103,7 +104,8 @@ fun CalculadoraProApp() {
             for (i in 0 until data.length()) {
                 val x = data.getJSONObject(i)
                 lista.add(MovimientoObra(x.getLong("id"), x.getString("titulo"),
-                    x.getString("categoria"), x.getInt("monto"), x.getBoolean("esIngreso")))
+                    x.getString("categoria"), x.getInt("monto"), x.getBoolean("esIngreso"),
+                    x.optLong("obraId", 0L)))
             }
         }
     } }
@@ -241,6 +243,7 @@ fun CalculadoraProApp() {
         movimientos.forEach { m -> data.put(JSONObject().apply {
             put("id", m.id); put("titulo", m.titulo); put("categoria", m.categoria)
             put("monto", m.monto); put("esIngreso", m.esIngreso)
+            put("obraId", m.obraId)
         }) }
         prefs.edit().putString("movimientos", data.toString()).apply()
     }
@@ -288,7 +291,10 @@ fun CalculadoraProApp() {
     ) { innerPadding ->
         Box(modifier = Modifier.padding(innerPadding)) {
             when (selectedTab) {
-                0 -> FinanzasObraScreen(movimientos)
+                0 -> FinanzasPorObraScreen(
+                    presupuestos = presupuestosGuardados,
+                    movimientos = movimientos
+                )
                 1 -> ConfiguradorObraScreen(
                     precios = preciosBase,
                     categorias = categoriasPrecios,
@@ -332,17 +338,9 @@ fun CalculadoraProApp() {
                         itemsPresupuesto.clear()
                         itemsPresupuesto.addAll(sinDuplicados)
                     },
-                    onGuardarEnFinanzas = { totalFinal ->
-                        movimientos.add(
-                            0,
-                            MovimientoObra(
-                                id = System.currentTimeMillis(),
-                                titulo = "Cobro recibido: $nombreCliente",
-                                categoria = "Ingreso real",
-                                monto = totalFinal,
-                                esIngreso = true
-                            )
-                        )
+                    onGuardarEnFinanzas = { _ ->
+                        // Una cotización NO registra pagos; pasar a Finanzas para
+                        // seleccionar la obra y registrar el monto realmente recibido.
                         selectedTab = 0
                     }
                 )
