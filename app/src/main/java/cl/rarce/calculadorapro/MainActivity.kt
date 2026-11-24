@@ -744,6 +744,13 @@ fun PresupuestoScreen(
     var presupuestoAEliminar by remember { mutableStateOf<Long?>(null) }
     var buscarPresupuesto by remember { mutableStateOf("") }
     var mensaje by remember { mutableStateOf("") }
+    var mostrarPerfil by remember { mutableStateOf(false) }
+    var perfil by remember { mutableStateOf(cargarPerfil(context)) }
+    val gruposPartidas = items.withIndex().groupBy { (_, item) ->
+        val p = item.nombre.split(" / ")
+        if (p.size >= 3) p.take(2).joinToString(" · ") else "Otras partidas"
+    }
+    var abiertos by remember { mutableStateOf(setOf<String>()) }
     val presupuestoActual = PresupuestoGuardado(
         presupuestoActivoId.takeIf { it != 0L } ?: System.currentTimeMillis(),
         cliente.trim(), obra.trim(), fechaPresupuesto(), totalManoObra, items.toList()
@@ -782,15 +789,55 @@ fun PresupuestoScreen(
             Text("Detalle del presupuesto", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = TextMain)
             Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF0F2922)),
                 modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.fillMaxWidth().padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(nombrePartida, fontSize = 17.sp, fontWeight = FontWeight.Bold, color = TextMain)
-                    if (items.map { it.nombre.split(" / ").take(2).joinToString(" / ") }.distinct().size > 1)
-                        Text("Incluye otras partidas del presupuesto", color = TextMuted, fontSize = 12.sp)
-                    Text("TOTAL PRESUPUESTADO", color = TextMuted, fontSize = 11.sp)
+                Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("TOTAL PRESUPUESTADO", fontSize = 11.sp, color = TextMuted)
                     Text(formatoCLP(granTotal), fontSize = 27.sp,
                         fontWeight = FontWeight.ExtraBold, color = AccentGreen)
-                    Text("${items.size} materiales · mano de obra incluida", color = TextMuted, fontSize = 11.sp)
+                    if (gruposPartidas.isEmpty()) {
+                        Text("Sin trabajos agregados", color = TextMuted)
+                    }
+                    gruposPartidas.forEach { (titulo, grupo) ->
+                        val subtotal = grupo.sumOf { it.value.total.toLong() }
+                        Column(Modifier.fillMaxWidth()) {
+                            Row(
+                                Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+                                    .clickable { abiertos = if (titulo in abiertos) abiertos - titulo else abiertos + titulo }
+                                    .padding(vertical = 10.dp, horizontal = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(if (titulo in abiertos) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                    contentDescription = "Desplegar trabajo", tint = AccentGreen)
+                                Column(Modifier.weight(1f)) {
+                                    Text(titulo, color = TextMain, fontWeight = FontWeight.Bold)
+                                    Text("${grupo.size} materiales", color = TextMuted, fontSize = 11.sp)
+                                }
+                                Text(formatoCLP(subtotal.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()),
+                                    fontWeight = FontWeight.Bold, color = AccentGreen)
+                            }
+                            if (titulo in abiertos) {
+                                grupo.forEach { indexed ->
+                                    val item = indexed.value
+                                    Row(
+                                        Modifier.fillMaxWidth().padding(start = 16.dp, top = 6.dp, bottom = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(Modifier.weight(1f)) {
+                                            Text(item.nombre.substringAfterLast(" / "), color = TextMain, fontSize = 12.sp)
+                                            Text(item.cantidad + " · " + formatoCLP(item.total),
+                                                color = TextMuted, fontSize = 11.sp)
+                                        }
+                                        TextButton(onClick = { onQuitarItem(indexed.index) }) {
+                                            Text("Quitar", color = AccentRed, fontSize = 11.sp)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if (totalManoObra > 0) {
+                        Text("Mano de obra: " + formatoCLP(totalManoObra), color = TextMuted, fontSize = 12.sp)
+                    }
                 }
             }
             if (mensaje.isNotBlank()) Text(mensaje, color = AccentAmber, fontSize = 12.sp)
@@ -825,6 +872,21 @@ fun PresupuestoScreen(
             }
         }
 
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = BgCard),
+                modifier = Modifier.fillMaxWidth()) {
+                Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Responsable del presupuesto", fontWeight = FontWeight.SemiBold, color = TextMain)
+                        Text(perfil.encabezado, color = AccentGreen, fontSize = 13.sp)
+                        if (perfil.telefono.isNotBlank()) Text(perfil.telefono, color = TextMuted, fontSize = 12.sp)
+                    }
+                    OutlinedButton(onClick = { mostrarPerfil = true }) {
+                        Text(if (perfil.nombre.isBlank() && perfil.empresa.isBlank()) "Configurar" else "Editar")
+                    }
+                }
+            }
+        }
         item {
             Text("GUARDAR ESTE PRESUPUESTO", color = AccentGreen,
                 fontWeight = FontWeight.Bold, fontSize = 13.sp)
@@ -866,24 +928,6 @@ fun PresupuestoScreen(
                 TextButton(onClick = onVaciarItems) { Text("Vaciar borrador", color = AccentRed) }
             }
         }
-        items(items.size) { index ->
-            val item = items[index]
-            Row(
-                modifier = Modifier.fillMaxWidth()
-                    .background(BgCard, RoundedCornerShape(10.dp)).padding(10.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text(item.nombre, fontWeight = FontWeight.SemiBold,
-                        color = TextMain, fontSize = 13.sp)
-                    Text(item.cantidad, fontSize = 12.sp, color = TextMuted)
-                }
-                Text(formatoCLP(item.total), fontWeight = FontWeight.Bold, color = TextMain, fontSize = 12.sp)
-                TextButton(onClick = { onQuitarItem(index) }) { Text("Quitar", color = AccentRed, fontSize = 11.sp) }
-            }
-        }
-
         item {
             Button(
                 onClick = {
@@ -892,6 +936,9 @@ fun PresupuestoScreen(
                         appendLine("Cliente: $cliente")
                         appendLine("Obra: $obra")
                         appendLine("Fecha: ${fechaPresupuesto()}")
+                        appendLine("Responsable: ${perfil.nombre}")
+                        if (perfil.empresa.isNotBlank()) appendLine("Empresa: ${perfil.empresa}")
+                        if (perfil.telefono.isNotBlank()) appendLine("Teléfono: ${perfil.telefono}")
                         appendLine("-----------------------------")
                         items.forEach {
                             appendLine("• ${it.nombre} (${it.cantidad}): ${formatoCLP(it.total)}")
@@ -953,6 +1000,16 @@ fun PresupuestoScreen(
             }
         }
     }
+    if (mostrarPerfil) EditorPerfilProfesional(
+        inicial = perfil,
+        onCerrar = { mostrarPerfil = false },
+        onGuardar = {
+            guardarPerfil(context, it)
+            perfil = it
+            mostrarPerfil = false
+            mensaje = "Datos profesionales guardados."
+        }
+    )
     if (confirmarNuevo) {
         AlertDialog(onDismissRequest = { confirmarNuevo = false },
             title = { Text("¿Crear nuevo presupuesto?") },
