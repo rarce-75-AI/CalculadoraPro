@@ -265,17 +265,18 @@ fun CalculadoraProApp() {
                 contentColor = TextMuted
             ) {
                 val navItems = listOf(
-                    Triple("Finanzas", Icons.Default.AccountBalanceWallet, 0),
-                    Triple("Trabajos", Icons.Default.Calculate, 1),
-                    Triple("Presupuesto", Icons.Default.Description, 2),
-                    Triple("Precios", Icons.Default.Inventory, 3)
+                    Triple("Inicio", Icons.Default.Home, 0),
+                    Triple("Finanzas", Icons.Default.AccountBalanceWallet, 1),
+                    Triple("Trabajos", Icons.Default.Construction, 2),
+                    Triple("Presup.", Icons.Default.Description, 3),
+                    Triple("Precios", Icons.Default.Inventory, 4)
                 )
                 navItems.forEach { (label, icon, index) ->
                     NavigationBarItem(
                         selected = selectedTab == index,
                         onClick = { selectedTab = index },
                         icon = { Icon(icon, contentDescription = label) },
-                        label = { Text(label, fontSize = if (index == 2) 9.sp else 11.sp, maxLines = 1, softWrap = false) },
+                        label = { Text(label, fontSize = 10.sp, maxLines = 1, softWrap = false) },
                         alwaysShowLabel = true,
                         colors = NavigationBarItemDefaults.colors(
                             selectedIconColor = AccentGreen,
@@ -291,11 +292,20 @@ fun CalculadoraProApp() {
     ) { innerPadding ->
         Box(modifier = Modifier.padding(innerPadding)) {
             when (selectedTab) {
-                0 -> FinanzasPorObraScreen(
+                0 -> InicioObrasScreen(
+                    context = context,
+                    presupuestos = presupuestosGuardados,
+                    movimientos = movimientos,
+                    onFinanzas = { selectedTab = 1 },
+                    onTrabajos = { selectedTab = 2 },
+                    onPresupuestos = { selectedTab = 3 },
+                    onPrecios = { selectedTab = 4 }
+                )
+                1 -> FinanzasPorObraScreen(
                     presupuestos = presupuestosGuardados,
                     movimientos = movimientos
                 )
-                1 -> ConfiguradorObraScreen(
+                2 -> ConfiguradorObraScreen(
                     precios = preciosBase,
                     categorias = categoriasPrecios,
                     unidades = unidadesPrecios,
@@ -306,14 +316,14 @@ fun CalculadoraProApp() {
                             itemsPresupuesto.removeAll { it.nombre.startsWith(prefijo) }
                         }
                         itemsPresupuesto.addAll(nuevosItems.distinctBy { it.nombre })
-                        selectedTab = 2
+                        selectedTab = 3
                     },
                     yaAgregado = { grupo ->
                         itemsPresupuesto.any { it.nombre.startsWith("$grupo / ") }
                     },
-                    onCatalogo = { selectedTab = 3 }
+                    onCatalogo = { selectedTab = 4 }
                 )
-                2 -> PresupuestoScreen(
+                3 -> PresupuestoScreen(
                     cliente = nombreCliente,
                     onClienteChange = { nombreCliente = it },
                     obra = nombreObra,
@@ -346,10 +356,10 @@ fun CalculadoraProApp() {
                     onGuardarEnFinanzas = { _ ->
                         // Nunca registrar una cotización como cobro; sólo abrir Finanzas.
                         prefs.edit().putLong("finanzas_obra_seleccionada", presupuestoActivoId).apply()
-                        selectedTab = 0
+                        selectedTab = 1
                     }
                 )
-                3 -> CatalogoObraScreen(preciosBase, categoriasPrecios, unidadesPrecios)
+                4 -> CatalogoObraScreen(preciosBase, categoriasPrecios, unidadesPrecios)
             }
         }
     }
