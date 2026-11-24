@@ -180,6 +180,12 @@ fun ConfiguradorObraScreen(
     var expanded by remember { mutableStateOf(false) }
     var solucion by remember { mutableStateOf("") }
     var consumos by remember { mutableStateOf(mapOf<String, String>()) }
+    // Dosificación de referencia, editable por proyecto. No reemplaza diseño de mezcla.
+    var cementoKgM3 by remember { mutableStateOf("300") }
+    var arenaM3M3 by remember { mutableStateOf("0,55") }
+    var gravaM3M3 by remember { mutableStateOf("0,80") }
+    var traslapeMalla by remember { mutableStateOf("10") }
+    val incluirSugerido = remember { mutableStateMapOf<String, Boolean>() }
 
     val opciones = when (trabajo) {
         "Radier" -> listOf("Hormigón simple", "Con malla", "Sobre base compactada")
@@ -190,13 +196,14 @@ fun ConfiguradorObraScreen(
         "Techumbre" -> listOf("Plancha metálica", "Tejas", "Otra cubierta")
         else -> listOf("Definido por usuario")
     }
-    LaunchedEffect(trabajo) { solucion = opciones.first(); consumos = emptyMap() }
+    LaunchedEffect(trabajo) { solucion = opciones.first(); consumos = emptyMap(); incluirSugerido.clear() }
     val l = numObra(largo) ?: 0.0
     val a = numObra(ancho) ?: 0.0
     val area = l * a
     val volumen = area * (numObra(espesor) ?: 0.0) / 100.0
     val esVolumen = trabajo == "Radier" || (trabajo == "Piso cerámico" && solucion == "Con radier nuevo")
-    val valido = l > 0.0 && a > 0.0 && l <= 1000.0 && a <= 1000.0
+    val valido = l > 0.0 && a > 0.0 && l <= 1000.0 && a <= 1000.0 &&
+        (!esVolumen || (numObra(espesor) ?: 0.0) > 0.0)
     val desperdicio = (numObra(merma) ?: 0.0).coerceIn(0.0, 100.0)
     val partidas = consumos.mapNotNull { (nombre, factorTexto) ->
         val f = numObra(factorTexto)
@@ -211,8 +218,43 @@ fun ConfiguradorObraScreen(
             precio, (cantidad * precio).toInt()
         )
     }
-    val total = partidas.sumOf { it.total.toLong() }
+    // Radier: las cantidades se derivan de m³ de hormigón, nunca de sacos por m².
+    // Parámetros de ejemplo editables: se deben verificar según diseño y suministro.
+    val datosDosificacionValidos = listOf(cementoKgM3, arenaM3M3, gravaM3M3).all {
+        (numObra(it) ?: 0.0) > 0.0
+    } && numObra(traslapeMalla) != null
+    val sugerenciasRadier = if (trabajo == "Radier" && valido && datosDosificacionValidos) {
+        val volumenCompra = volumen * (1.0 + desperdicio / 100.0)
+        val sacos = ceil(volumenCompra * (numObra(cementoKgM3) ?: 300.0) / 25.0)
+        val arena = ceil(volumenCompra * (numObra(arenaM3M3) ?: 0.55) * 100.0) / 100.0
+        val grava = ceil(volumenCompra * (numObra(gravaM3M3) ?: 0.80) * 100.0) / 100.0
+        val malla = ceil(area * (1.0 + (numObra(traslapeMalla) ?: 10.0) / 100.0) * 100.0) / 100.0
+        fun recomendado(nombre: String, cantidad: Double, unidad: String): MaterialItem {
+            val p = precios[nombre] ?: 0
+            val costo = ceil(cantidad * p.toDouble()).coerceIn(0.0, Int.MAX_VALUE.toDouble()).toInt()
+            val cantidadTexto = if (unidad == "sacos") cantidad.toLong().toString() else mostrarObra(cantidad)
+            return MaterialItem(
+                "Radier / " + solucion + " / " + nombre,
+                cantidadTexto + " " + unidad,
+                p, costo
+            )
+        }
+        buildList {
+            add(recomendado("Cemento 25kg (saco)", sacos, "sacos"))
+            add(recomendado("Arena para hormigón (m³)", arena, "m³"))
+            add(recomendado("Grava para hormigón (m³)", grava, "m³"))
+            if (solucion == "Con malla") add(recomendado("Malla electrosoldada (m²)", malla, "m²"))
+        }
+    } else emptyList()
+    val sugeridosElegidos = sugerenciasRadier.filter { item ->
+        val key = item.nombre.substringAfterLast(" / ")
+        incluirSugerido[key] != false
+    }
+    val partidasFinales = sugeridosElegidos + partidas
+    val total = partidasFinales.sumOf { it.total.toLong() }
+    val nombresSugeridos = sugerenciasRadier.map { it.nombre.substringAfterLast(" / ") }.toSet()
     val visibles = precios.keys.filter { key ->
+        key !in nombresSugeridos &&
         (buscar.isBlank() || key.contains(buscar, true) ||
             (categorias[key] ?: "").contains(buscar, true)) &&
             (!filtroElegidos || consumos.containsKey(key))
@@ -270,10 +312,62 @@ fun ConfiguradorObraScreen(
                 color = AccentGreen, fontWeight = FontWeight.Bold)
             else Text("Ingresa medidas reales para calcular.", color = AccentAmber)
         }
+        if (trabajo == "Radier") item {
+            HorizontalDivider(color = BorderSubtle)
+            Text("Materiales sugeridos para el radier", fontSize = 18.sp,
+                fontWeight = FontWeight.Bold, color = TextMain)
+            Text("La estimación utiliza el volumen de hormigón: superficie × espesor. Ajusta la dosificación antes de presupuestar.",
+                fontSize = 12.sp, color = TextMuted)
+            OutlinedTextField(value = cementoKgM3, onValueChange = { cementoKgM3 = it },
+                label = { Text("Cemento (kg por m³ de hormigón)") },
+                modifier = Modifier.fillMaxWidth(), singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(value = arenaM3M3, onValueChange = { arenaM3M3 = it },
+                    label = { Text("Arena (m³/m³)") }, modifier = Modifier.weight(1f),
+                    singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
+                OutlinedTextField(value = gravaM3M3, onValueChange = { gravaM3M3 = it },
+                    label = { Text("Grava (m³/m³)") }, modifier = Modifier.weight(1f),
+                    singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
+            }
+            if (solucion == "Con malla") {
+                OutlinedTextField(value = traslapeMalla, onValueChange = { traslapeMalla = it },
+                    label = { Text("Traslape y recortes de malla (%)") },
+                    modifier = Modifier.fillMaxWidth(), singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
+            }
+            if (!datosDosificacionValidos)
+                Text("Ingresa factores válidos para calcular los materiales.", color = AccentAmber)
+            if (valido && datosDosificacionValidos) {
+                Text("Hormigón geométrico: " + mostrarObra(volumen) +
+                    " m³ · Con merma: " + mostrarObra(volumen * (1.0 + desperdicio / 100.0)) + " m³",
+                    color = AccentGreen, fontWeight = FontWeight.SemiBold)
+            }
+            sugerenciasRadier.forEach { mat ->
+                val key = mat.nombre.substringAfterLast(" / ")
+                Card(colors = CardDefaults.cardColors(containerColor = BgCard)) {
+                    Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = incluirSugerido[key] != false,
+                            onCheckedChange = { incluirSugerido[key] = it })
+                        Column(Modifier.weight(1f)) {
+                            Text(key, color = TextMain, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                            Text("Cantidad sugerida: " + mat.cantidad,
+                                color = AccentAmber, fontSize = 12.sp)
+                            Text(if (mat.precioUnitario == 0) "Sin precio: configúralo en el catálogo"
+                                 else formatoCLP(mat.total),
+                                color = if (mat.precioUnitario == 0) AccentAmber else TextMuted,
+                                fontSize = 11.sp)
+                        }
+                    }
+                }
+            }
+            Text("Valores orientativos, no dosificación estructural certificada. Verifica resistencia, áridos, compactación, espesor, refuerzo y dosificación técnica.",
+                color = TextMuted, fontSize = 11.sp)
+        }
         item {
             HorizontalDivider(color = BorderSubtle)
-            Text("Selecciona materiales", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = TextMain)
-            Text("Indica el consumo o cantidad por m². Si el producto se vende en m³ y hay hormigón, usa factor por m³. Los rendimientos son tuyos, no valores ocultos.",
+            Text("Materiales adicionales del catálogo", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = TextMain)
+            Text("Opcional: incorpora materiales adicionales, con el consumo que corresponda. Para cemento, áridos y malla del radier usa las sugerencias calculadas de arriba.",
                 fontSize = 12.sp, color = TextMuted)
             OutlinedButton(onClick = onCatalogo, modifier = Modifier.fillMaxWidth()) {
                 Text("+ Agregar materiales a mi catálogo")
@@ -313,14 +407,15 @@ fun ConfiguradorObraScreen(
         }
         item {
             if (precios.isEmpty()) Text("No hay productos en tu catálogo. Agrégalos en Precios.", color = AccentAmber)
-            Text("Materiales válidos: " + partidas.size.toString() +
+            Text("Materiales válidos: " + partidasFinales.size.toString() +
                 " · Subtotal: " + formatoCLP(total.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()),
                 color = AccentGreen, fontWeight = FontWeight.Bold)
             if (consumos.isNotEmpty() && partidas.size != consumos.size)
                 Text("Revisa consumos y medidas de todos los artículos seleccionados.", color = AccentAmber)
-            Button(onClick = { onAgregar(partidas) }, modifier = Modifier.fillMaxWidth(),
-                enabled = valido && partidas.isNotEmpty() &&
-                    partidas.size == consumos.size && total <= Int.MAX_VALUE) {
+            Button(onClick = { onAgregar(partidasFinales) }, modifier = Modifier.fillMaxWidth(),
+                enabled = valido && partidasFinales.isNotEmpty() &&
+                    partidas.size == consumos.size && total <= Int.MAX_VALUE &&
+                    (trabajo != "Radier" || datosDosificacionValidos)) {
                 Text("Agregar partida al presupuesto")
             }
             Text("Cubicación orientativa. Verifica espesores, formato comercial y consumo del fabricante.",
