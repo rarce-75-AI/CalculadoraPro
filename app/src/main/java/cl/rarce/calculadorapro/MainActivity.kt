@@ -901,6 +901,12 @@ fun PresupuestoScreen(
                                 guardado.cliente.replace(Regex("[^a-zA-Z0-9_-]"), "_").take(35) + ".xlsx")
                         }, contentPadding = PaddingValues(horizontal = 5.dp, vertical = 0.dp),
                             modifier = Modifier.height(34.dp)) { Text("Excel", fontSize = 11.sp) }
+                        TextButton(onClick = { presupuestoAEliminar = guardado.id },
+                            contentPadding = PaddingValues(horizontal = 5.dp, vertical = 0.dp),
+                            modifier = Modifier.height(34.dp)) {
+                            Icon(Icons.Default.DeleteOutline, contentDescription = "Eliminar presupuesto",
+                                modifier = Modifier.size(16.dp), tint = AccentRed)
+                        }
                     }
                     if (mostrarDetalle) {
                         HorizontalDivider(color = BorderSubtle)
@@ -1230,7 +1236,9 @@ fun PresupuestoScreen(
     presupuestoAEliminar?.let { id ->
         AlertDialog(onDismissRequest = { presupuestoAEliminar = null },
             title = { Text("Eliminar presupuesto guardado") },
-            text = { Text("Se eliminará del listado local. No elimina archivos exportados.") },
+            text = { Text("Se eliminará el presupuesto guardado. No se puede recuperar. " +
+                "Si está vinculado a una obra iniciada, elimínala primero desde Finanzas. " +
+                "Los PDF y Excel exportados no se borrarán.") },
             confirmButton = { Button(onClick = {
                 val borrado = onEliminar(id)
                 presupuestoAEliminar = null
