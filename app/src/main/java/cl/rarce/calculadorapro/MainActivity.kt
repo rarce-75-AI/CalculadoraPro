@@ -339,7 +339,7 @@ fun CalculadoraProApp() {
                         } else {
                             presupuestosGuardados.removeAll { it.id == id }
                             guardarPresupuestos(context, presupuestosGuardados)
-                            if (presupuestoActivoId == id) presupuestoActivoId = 0L
+                            if (presupuestoActivoId == id) crearNuevoPresupuesto()
                             true
                         }
                     },
