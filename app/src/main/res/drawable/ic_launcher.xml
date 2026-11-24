@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#063847" android:pathData="M0,0h108v108h-108z"/>
+    <!-- Construction helmet -->
+    <path android:fillColor="#F2A900" android:pathData="M21,39 C21,23 32,12 46,11 L46,8 Q54,4 62,8 L62,11 C78,12 88,23 88,39 L93,43 Q97,47 92,51 Q88,54 82,53 L26,53 Q16,54 14,48 Q13,44 21,39z"/>
+    <path android:fillColor="#FFD12A" android:pathData="M23,40 C23,25 36,15 48,14 L48,10 Q54,8 60,10 L60,14 C76,15 85,26 85,40 L92,45 Q94,48 87,49 L22,49 Q16,48 23,43z"/>
+    <path android:fillColor="#F6AA00" android:pathData="M47,13 Q54,9 61,13 L64,42 L45,42z"/>
+    <path android:fillColor="#FFE16B" android:pathData="M50,13 L54,11 L57,12 L59,40 L48,40z"/>
+    <path android:fillColor="#BA6E00" android:pathData="M19,48 Q54,43 89,48 L87,51 Q53,47 21,51z"/>
+    <!-- Bold white R -->
+    <path android:fillColor="#FFFFFF" android:fillType="evenOdd"
+        android:pathData="M35,45 L60,45 Q79,45 79,61 Q79,72 69,76 L82,92 L65,92 L54,78 L49,78 L49,92 L35,92 Z M49,57 L49,67 L60,67 Q65,67 65,62 Q65,57 60,57 Z"/>
+    <!-- Tape measure below R -->
+    <path android:fillColor="#18212A" android:pathData="M14,80 Q14,73 21,73 L32,73 Q38,73 38,80 L38,96 L14,96z"/>
+    <path android:fillColor="#FFBD19" android:pathData="M18,81 Q18,77 23,77 L30,77 Q34,77 34,82 L34,91 L18,91z"/>
+    <path android:fillColor="#202A32" android:pathData="M25,81 m-5,0 a5,5 0,1 0,10 0 a5,5 0,1 0,-10 0"/>
+    <path android:fillColor="#F9C21A" android:pathData="M34,86 L93,86 L93,95 L34,95z"/>
+    <path android:fillColor="#283038" android:pathData="M41,86 v5 h2 v-5 M48,86 v3 h1 v-3 M54,86 v5 h2 v-5 M62,86 v3 h1 v-3 M68,86 v5 h2 v-5 M76,86 v3 h1 v-3 M82,86 v5 h2 v-5 M89,86 v3 h1 v-3"/>
+    <path android:fillColor="#C9D3D8" android:pathData="M93,85 l6,3 v9 l-6,-2z"/>
+</vector>
