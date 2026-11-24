@@ -4,6 +4,8 @@ import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -288,7 +290,7 @@ fun FinanzasPorObraScreen(
         onDismissRequest = { abrirSelector = false },
         title = { Text("Seleccionar obra") },
         text = {
-            Column(Modifier.heightIn(max = 400.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Column(Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 TextButton(onClick = { obraSeleccionadaId = 0L; abrirSelector = false }) {
                     Text("Todas las obras · Resumen general")
                 }
@@ -310,7 +312,7 @@ fun FinanzasPorObraScreen(
         AlertDialog(onDismissRequest = { mostrarConfig = false },
             title = { Text("Datos de la obra") },
             text = {
-                Column(Modifier.heightIn(max = 430.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(Modifier.heightIn(max = 430.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (disponibles.isEmpty()) Text("Guarda primero un presupuesto en la pestaña Presupuesto.")
                     else {
                         Text("Presupuesto vinculado:", fontWeight = FontWeight.Bold)
