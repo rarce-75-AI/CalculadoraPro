@@ -347,6 +347,9 @@ fun CalculadoraProApp() {
                     manoDeObra = manoDeObra,
                     onManoDeObraChange = { manoDeObra = it },
                     onQuitarItem = { index -> if (index in itemsPresupuesto.indices) itemsPresupuesto.removeAt(index) },
+                    onActualizarItem = { index, actualizado ->
+                        if (index in itemsPresupuesto.indices) itemsPresupuesto[index] = actualizado
+                    },
                     onVaciarItems = { itemsPresupuesto.clear() },
                     onQuitarDuplicados = {
                         val sinDuplicados = itemsPresupuesto.distinct()
@@ -744,6 +747,7 @@ fun PresupuestoScreen(
     manoDeObra: String,
     onManoDeObraChange: (String) -> Unit,
     onQuitarItem: (Int) -> Unit,
+    onActualizarItem: (Int, MaterialItem) -> Unit,
     onVaciarItems: () -> Unit,
     onQuitarDuplicados: () -> Unit,
     onGuardarEnFinanzas: (Int) -> Unit
@@ -766,6 +770,10 @@ fun PresupuestoScreen(
         if (p.size >= 3) p.take(2).joinToString(" · ") else "Otras partidas"
     }
     var abiertos by remember { mutableStateOf(setOf<String>()) }
+    var itemEditando by remember { mutableStateOf<Pair<Int, MaterialItem>?>(null) }
+    var cantidadEditada by remember { mutableStateOf("") }
+    var precioEditado by remember { mutableStateOf("") }
+    var errorEdicion by remember { mutableStateOf("") }
     val presupuestoActual = PresupuestoGuardado(
         presupuestoActivoId.takeIf { it != 0L } ?: System.currentTimeMillis(),
         cliente.trim(), obra.trim(), fechaPresupuesto(), totalManoObra, items.toList()
@@ -972,8 +980,21 @@ fun PresupuestoScreen(
                                             Text(item.cantidad + " · " + formatoCLP(item.total),
                                                 color = TextMuted, fontSize = 11.sp)
                                         }
-                                        TextButton(onClick = { onQuitarItem(indexed.index) }) {
-                                            Text("Quitar", color = AccentRed, fontSize = 11.sp)
+                                        Column(horizontalAlignment = Alignment.End) {
+                                            TextButton(onClick = {
+                                                itemEditando = indexed.index to item
+                                                cantidadEditada = item.cantidad.substringBefore(" ").replace(',', '.')
+                                                precioEditado = item.precioUnitario.toString()
+                                                errorEdicion = ""
+                                            }, contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+                                                modifier = Modifier.height(32.dp)) {
+                                                Text("Editar", color = AccentGreen, fontSize = 11.sp)
+                                            }
+                                            TextButton(onClick = { onQuitarItem(indexed.index) },
+                                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+                                                modifier = Modifier.height(28.dp)) {
+                                                Text("Quitar", color = AccentRed, fontSize = 11.sp)
+                                            }
                                         }
                                     }
                                 }
@@ -1118,6 +1139,73 @@ fun PresupuestoScreen(
                 Text("Ir a Finanzas para registrar un cobro", color = AccentGreen)
             }
         }
+    }
+    itemEditando?.let { (indice, item) ->
+        AlertDialog(
+            onDismissRequest = { itemEditando = null },
+            title = { Text("Ajustar material") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(item.nombre.substringAfterLast(" / "),
+                        fontWeight = FontWeight.Bold, color = TextMain)
+                    Text("Cantidad original: " + item.cantidad,
+                        color = TextMuted, fontSize = 12.sp)
+                    val unidad = item.cantidad.substringAfter(" ", "").trim()
+                    OutlinedTextField(value = cantidadEditada, onValueChange = { cantidadEditada = it },
+                        label = { Text("Cantidad (" + unidad.ifBlank { "unidad" } + ")") },
+                        modifier = Modifier.fillMaxWidth(), singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
+                    OutlinedTextField(value = precioEditado, onValueChange = { precioEditado = it },
+                        label = { Text("Precio unitario (CLP)") },
+                        modifier = Modifier.fillMaxWidth(), singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+                    val q = cantidadEditada.replace(',', '.').toDoubleOrNull()
+                    val precio = precioEditado.toIntOrNull()
+                    if (q != null && q > 0 && q.isFinite() && precio != null && precio >= 0)
+                        Text("Nuevo total: " +
+                            formatoCLP(kotlin.math.ceil(q * precio).coerceAtMost(Int.MAX_VALUE.toDouble()).toInt()),
+                            color = AccentGreen, fontWeight = FontWeight.Bold)
+                    if (errorEdicion.isNotBlank()) Text(errorEdicion, color = AccentRed, fontSize = 12.sp)
+                    Text("Este cambio afecta únicamente la partida del presupuesto actual, no los precios del catálogo.",
+                        color = TextMuted, fontSize = 11.sp)
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    val cantidad = cantidadEditada.replace(',', '.').toDoubleOrNull()
+                    val precio = precioEditado.toIntOrNull()
+                    val entero = item.cantidad.substringAfter(" ", "").trim().let { unidad ->
+                        !unidad.contains("m²") && !unidad.contains("m³") &&
+                        !unidad.contains("kg") && !unidad.contains("ml")
+                    }
+                    val costo = if (cantidad != null && precio != null)
+                        kotlin.math.ceil(cantidad * precio.toDouble()) else Double.NaN
+                    when {
+                        cantidad == null || !cantidad.isFinite() || cantidad <= 0 ->
+                            errorEdicion = "Ingresa una cantidad válida mayor que cero."
+                        entero && cantidad % 1.0 != 0.0 ->
+                            errorEdicion = "Este material se compra por unidades enteras."
+                        precio == null || precio < 0 ->
+                            errorEdicion = "El precio debe ser igual o mayor que cero."
+                        !costo.isFinite() || costo > Int.MAX_VALUE ->
+                            errorEdicion = "El total es demasiado alto. Revisa la cantidad y el precio."
+                        else -> {
+                            val unidad = item.cantidad.substringAfter(" ", "").trim()
+                            val numero = if (entero) cantidad.toLong().toString()
+                                else String.format(Locale("es", "CL"), "%.2f", cantidad)
+                            onActualizarItem(indice, item.copy(
+                                cantidad = (numero + " " + unidad).trim(),
+                                precioUnitario = precio!!,
+                                total = costo.toInt()
+                            ))
+                            mensaje = "Material actualizado. Guarda el presupuesto para conservar los cambios."
+                            itemEditando = null
+                        }
+                    }
+                }) { Text("Aplicar cambio") }
+            },
+            dismissButton = { TextButton(onClick = { itemEditando = null }) { Text("Cancelar") } }
+        )
     }
     if (mostrarPerfil) EditorPerfilProfesional(
         inicial = perfil,
