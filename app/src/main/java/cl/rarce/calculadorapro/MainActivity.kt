@@ -324,9 +324,14 @@ fun CalculadoraProApp() {
                     onNuevo = { crearNuevoPresupuesto() },
                     onAbrir = { abrirGuardado(it) },
                     onEliminar = { id ->
-                        presupuestosGuardados.removeAll { it.id == id }
-                        guardarPresupuestos(context, presupuestosGuardados)
-                        if (presupuestoActivoId == id) presupuestoActivoId = 0L
+                        if (presupuestoConObraIniciada(context, id)) {
+                            false
+                        } else {
+                            presupuestosGuardados.removeAll { it.id == id }
+                            guardarPresupuestos(context, presupuestosGuardados)
+                            if (presupuestoActivoId == id) presupuestoActivoId = 0L
+                            true
+                        }
                     },
                     items = itemsPresupuesto,
                     manoDeObra = manoDeObra,
@@ -339,8 +344,8 @@ fun CalculadoraProApp() {
                         itemsPresupuesto.addAll(sinDuplicados)
                     },
                     onGuardarEnFinanzas = { _ ->
-                        // Una cotización NO registra pagos; pasar a Finanzas para
-                        // seleccionar la obra y registrar el monto realmente recibido.
+                        // Nunca registrar una cotización como cobro; sólo abrir Finanzas.
+                        prefs.edit().putLong("finanzas_obra_seleccionada", presupuestoActivoId).apply()
                         selectedTab = 0
                     }
                 )
@@ -724,7 +729,7 @@ fun PresupuestoScreen(
     onGuardar: () -> Unit,
     onNuevo: () -> Unit,
     onAbrir: (Long) -> Unit,
-    onEliminar: (Long) -> Unit,
+    onEliminar: (Long) -> Boolean,
     items: List<MaterialItem>,
     manoDeObra: String,
     onManoDeObraChange: (String) -> Unit,
@@ -1021,7 +1026,10 @@ fun PresupuestoScreen(
             title = { Text("Eliminar presupuesto guardado") },
             text = { Text("Se eliminará del listado local. No elimina archivos exportados.") },
             confirmButton = { Button(onClick = {
-                onEliminar(id); presupuestoAEliminar = null; mensaje = "Presupuesto eliminado."
+                val borrado = onEliminar(id)
+                presupuestoAEliminar = null
+                mensaje = if (borrado) "Presupuesto eliminado." else
+                    "No se puede eliminar: este presupuesto pertenece a una obra iniciada con movimientos o plazos."
             }) { Text("Eliminar") } },
             dismissButton = { TextButton(onClick = { presupuestoAEliminar = null }) { Text("Cancelar") } })
     }
