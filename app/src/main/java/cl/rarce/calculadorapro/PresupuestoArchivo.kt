@@ -101,7 +101,13 @@ fun exportarPresupuestoExcel(context: Context, uri: Uri, p: PresupuestoGuardado)
 <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
 </Relationships>""")
             val rows = mutableListOf<List<String>>()
+            val responsable = cargarPerfil(context)
             rows += listOf("CÁLCULO DE OBRA — PRESUPUESTO")
+            rows += listOf("Responsable", responsable.nombre)
+            rows += listOf("Constructora", responsable.empresa)
+            rows += listOf("Teléfono", responsable.telefono)
+            rows += listOf("Correo", responsable.correo)
+            rows += listOf("Dirección", responsable.direccion)
             rows += listOf("N°", p.id.toString())
             rows += listOf("Cliente", p.cliente)
             rows += listOf("Obra", p.obra)
@@ -120,7 +126,7 @@ fun exportarPresupuestoExcel(context: Context, uri: Uri, p: PresupuestoGuardado)
                     append("<row r=\"$rn\">")
                     fields.forEachIndexed { colIndex, value ->
                         val ref = ('A'.code + colIndex).toChar().toString() + rn
-                        val numeric = rowIndex >= 7 && colIndex >= 2 && value.toLongOrNull() != null
+                        val numeric = colIndex >= 2 && value.toLongOrNull() != null
                         append(if (numeric) xmlNumber(value.toLong(), colIndex) .replace("r=\"$colIndex\"", "r=\"$ref\"")
                             else xmlCell(value, colIndex).replace("r=\"$colIndex\"", "r=\"$ref\""))
                     }
@@ -133,61 +139,127 @@ fun exportarPresupuestoExcel(context: Context, uri: Uri, p: PresupuestoGuardado)
     } ?: error("No se pudo abrir el archivo Excel.")
 }
 
+
 fun exportarPresupuestoPdf(context: Context, uri: Uri, p: PresupuestoGuardado) {
+    val perfil = cargarPerfil(context)
     val pdf = PdfDocument()
-    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.BLACK; textSize = 11f }
-    val ancho = 595
-    val alto = 842
-    val margen = 42f
-    var pagina = 0
-    var y = 0f
+    val width = 595f
+    val height = 842f
+    val margin = 40f
+    val dark = android.graphics.Color.rgb(12, 34, 44)
+    val green = android.graphics.Color.rgb(18, 119, 86)
+    val muted = android.graphics.Color.rgb(94, 109, 118)
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    var current: PdfDocument.Page? = null
     var canvas: android.graphics.Canvas? = null
-    var page: PdfDocument.Page? = null
-    fun nuevaPagina() {
-        page?.let { pdf.finishPage(it) }
-        pagina++
-        page = pdf.startPage(PdfDocument.PageInfo.Builder(ancho, alto, pagina).create())
-        canvas = page!!.canvas
-        y = margen
+    var pageNumber = 0
+    var y = 0f
+
+    fun rect(l: Float, t: Float, r: Float, b: Float, color: Int) {
+        paint.color = color; paint.style = Paint.Style.FILL
+        canvas!!.drawRect(l, t, r, b, paint)
     }
-    fun linea(valor: String, titulo: Boolean = false) {
-        if (canvas == null || y > alto - margen) nuevaPagina()
-        paint.typeface = if (titulo) Typeface.create(Typeface.DEFAULT, Typeface.BOLD) else Typeface.DEFAULT
-        paint.textSize = if (titulo) 15f else 10f
-        val maxWidth = ancho - 2 * margen
-        var texto = valor
-        if (texto.isEmpty()) { y += 12; return }
-        while (texto.isNotEmpty()) {
-            val n = paint.breakText(texto, true, maxWidth, null).coerceAtLeast(1)
-            var cortar = n
-            if (n < texto.length) {
-                val ultimoEspacio = texto.substring(0, n).lastIndexOf(' ')
-                if (ultimoEspacio > n / 2) cortar = ultimoEspacio + 1
-            }
-            if (y > alto - margen) nuevaPagina()
-            canvas!!.drawText(texto.take(cortar).trim(), margen, y, paint)
-            y += if (titulo) 24 else 16
-            texto = texto.drop(cortar).trimStart()
+    fun text(value: String, x: Float, baseline: Float, size: Float = 10f,
+             color: Int = dark, bold: Boolean = false) {
+        paint.color = color
+        paint.textSize = size
+        paint.typeface = Typeface.create(Typeface.DEFAULT, if (bold) Typeface.BOLD else Typeface.NORMAL)
+        paint.style = Paint.Style.FILL
+        canvas!!.drawText(value, x, baseline, paint)
+    }
+    fun newPage() {
+        current?.let { pdf.finishPage(it) }
+        pageNumber++
+        current = pdf.startPage(PdfDocument.PageInfo.Builder(width.toInt(), height.toInt(), pageNumber).create())
+        canvas = current!!.canvas
+        rect(0f, 0f, width, 102f, dark)
+        runCatching {
+            val logo = context.getDrawable(R.drawable.ic_launcher)
+            logo?.setBounds(40, 19, 100, 79)
+            logo?.draw(canvas!!)
         }
+        text(perfil.encabezado.take(53), 112f, 43f, 18f, android.graphics.Color.WHITE, true)
+        val subtitulo = if (perfil.empresa.isNotBlank()) perfil.nombre else "CÁLCULO DE OBRA · PRESUPUESTO"
+        text(subtitulo.take(75), 112f, 62f, 10f, android.graphics.Color.WHITE)
+        if (perfil.telefono.isNotBlank())
+            text(("Tel.: " + perfil.telefono).take(75), 112f, 79f, 9f, android.graphics.Color.WHITE)
+        rect(margin, height - 34f, width - margin, height - 33f, android.graphics.Color.LTGRAY)
+        text("Cálculo de Obra · Documento generado desde la aplicación", margin, height - 18f, 8f, muted)
+        text("Pág. $pageNumber", width - 83f, height - 18f, 8f, muted)
+        y = 128f
+    }
+    fun space(h: Float) {
+        if (y + h > height - 55f) newPage()
+    }
+    fun line(value: String, size: Float = 10f, color: Int = dark, bold: Boolean = false,
+             indent: Float = margin, maxW: Float = width - 2 * margin) {
+        paint.textSize = size
+        paint.typeface = Typeface.create(Typeface.DEFAULT, if (bold) Typeface.BOLD else Typeface.NORMAL)
+        var remaining = value.trim()
+        if (remaining.isEmpty()) { y += 12f; return }
+        while (remaining.isNotEmpty()) {
+            space(size + 9f)
+            val count = paint.breakText(remaining, true, maxW, null).coerceAtLeast(1)
+            var split = count
+            if (count < remaining.length) {
+                val pos = remaining.substring(0, count).lastIndexOf(' ')
+                if (pos > count / 2) split = pos + 1
+            }
+            text(remaining.take(split).trim(), indent, y, size, color, bold)
+            y += size + 7f
+            remaining = remaining.drop(split).trimStart()
+        }
+    }
+    fun section(title: String) {
+        space(34f)
+        y += 12f
+        rect(margin, y - 12f, width - margin, y + 14f, android.graphics.Color.rgb(232, 243, 238))
+        text(title, margin + 10f, y + 6f, 11f, green, true)
+        y += 31f
     }
     try {
-        nuevaPagina()
-        linea("CÁLCULO DE OBRA", true)
-        linea("PRESUPUESTO N° " + p.id)
-        linea("Cliente: " + p.cliente)
-        linea("Obra: " + p.obra)
-        linea("Fecha: " + p.fecha)
-        linea("")
-        linea("PARTIDAS", true)
-        p.partidas.forEachIndexed { i, m ->
-            linea("${i + 1}. ${m.nombre}")
-            linea("   ${m.cantidad}   x   ${formatoCLP(m.precioUnitario)}   =   ${formatoCLP(m.total)}")
+        newPage()
+        line("PRESUPUESTO N° " + p.id, 16f, dark, true)
+        line("Fecha: " + p.fecha, 10f, muted)
+        line("Cliente: " + p.cliente, 12f, dark, true)
+        if (p.obra.isNotBlank()) line("Obra: " + p.obra, 10f)
+        if (perfil.correo.isNotBlank()) line("Correo responsable: " + perfil.correo, 9f, muted)
+        if (perfil.direccion.isNotBlank()) line("Dirección responsable: " + perfil.direccion, 9f, muted)
+
+        val grupos = p.partidas.groupBy { item ->
+            val partes = item.nombre.split(" / ")
+            if (partes.size >= 3) partes.take(2).joinToString(" · ") else "Otras partidas"
         }
-        linea("")
-        linea("Mano de obra: " + formatoCLP(p.manoDeObra))
-        linea("TOTAL ESTIMADO: " + formatoCLP(p.total.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()), true)
-        page?.let { pdf.finishPage(it) }
+        grupos.forEach { (titulo, detalles) ->
+            section(titulo)
+            detalles.forEach { item ->
+                space(43f)
+                line(item.nombre.substringAfterLast(" / "), 10f, dark, true)
+                line(item.cantidad + "  ·  Unitario: " + formatoCLP(item.precioUnitario) +
+                    "  ·  Importe: " + formatoCLP(item.total), 9f, muted)
+                y += 3f
+            }
+            space(24f)
+            val subtotal = detalles.sumOf { it.total.toLong() }
+            line("Subtotal " + titulo + ": $" + "%,d".format(Locale("es", "CL"), subtotal) + " CLP",
+                10f, green, true)
+        }
+        section("RESUMEN ECONÓMICO")
+        val subtotalMat = p.partidas.sumOf { it.total.toLong() }
+        line("Materiales y partidas: $" + "%,d".format(Locale("es", "CL"), subtotalMat) + " CLP", 11f)
+        line("Mano de obra: " + formatoCLP(p.manoDeObra), 11f)
+        space(52f)
+        rect(margin, y - 2f, width - margin, y + 42f, dark)
+        text("TOTAL ESTIMADO", margin + 12f, y + 15f, 10f, android.graphics.Color.WHITE, true)
+        text("$" + "%,d".format(Locale("es", "CL"), p.total) + " CLP",
+            margin + 12f, y + 34f, 16f, android.graphics.Color.WHITE, true)
+        y += 57f
+        line("Valores de carácter presupuestario, sujetos a verificación de cantidades y condiciones de obra.",
+            8f, muted)
+        current?.let { pdf.finishPage(it) }
         context.contentResolver.openOutputStream(uri)?.use { pdf.writeTo(it) }
-            ?: error("No se pudo abrir el archivo PDF.")
-    } finally { pdf.close() }
+            ?: error("No se pudo abrir el archivo PDF")
+    } finally {
+        pdf.close()
+    }
 }
