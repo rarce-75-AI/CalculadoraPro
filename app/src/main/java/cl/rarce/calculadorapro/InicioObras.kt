@@ -27,17 +27,14 @@ private fun moneyInicio(v: Long) = "$" +
 
 @Composable
 private fun AccesoInicio(nombre: String, descripcion: String, icono: ImageVector, onClick: () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+    Card(modifier = Modifier.clickable(onClick = onClick),
         colors = CardDefaults.cardColors(containerColor = BgCard),
         shape = RoundedCornerShape(14.dp)) {
-        Row(Modifier.fillMaxWidth().padding(13.dp), verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Icon(icono, contentDescription = null, tint = AccentGreen, modifier = Modifier.size(25.dp))
-            Column(Modifier.weight(1f)) {
-                Text(nombre, color = TextMain, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                Text(descripcion, color = TextMuted, fontSize = 11.sp)
-            }
-            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = TextMuted)
+        Column(Modifier.fillMaxWidth().padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Icon(icono, contentDescription = null, tint = AccentGreen, modifier = Modifier.size(24.dp))
+            Text(nombre, color = TextMain, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            Text(descripcion, color = TextMuted, fontSize = 10.sp, maxLines = 2)
         }
     }
 }
@@ -106,17 +103,27 @@ fun InicioObrasScreen(
         item {
             Text("Accesos rápidos", color = TextMain, fontWeight = FontWeight.Bold, fontSize = 17.sp)
             Spacer(Modifier.height(5.dp))
-            AccesoInicio("Finanzas", "Cobros, anticipos y gastos por obra",
-                Icons.Default.AccountBalanceWallet, onFinanzas)
-            Spacer(Modifier.height(6.dp))
-            AccesoInicio("Trabajos", "Configurar radier, pisos y otras partidas",
-                Icons.Default.Construction, onTrabajos)
-            Spacer(Modifier.height(6.dp))
-            AccesoInicio("Presupuestos", "Clientes, tarjetas y exportaciones",
-                Icons.Default.Description, onPresupuestos)
-            Spacer(Modifier.height(6.dp))
-            AccesoInicio("Precios", "Catálogo y valores de materiales",
-                Icons.Default.Inventory, onPrecios)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(Modifier.weight(1f)) {
+                    AccesoInicio("Finanzas", "Cobros, anticipos y gastos",
+                        Icons.Default.AccountBalanceWallet, onFinanzas)
+                }
+                Box(Modifier.weight(1f)) {
+                    AccesoInicio("Trabajos", "Radier, pisos y partidas",
+                        Icons.Default.Construction, onTrabajos)
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(Modifier.weight(1f)) {
+                    AccesoInicio("Presupuestos", "Clientes y cotizaciones",
+                        Icons.Default.Description, onPresupuestos)
+                }
+                Box(Modifier.weight(1f)) {
+                    AccesoInicio("Precios", "Catálogo de materiales",
+                        Icons.Default.Inventory, onPrecios)
+                }
+            }
         }
         item {
             Text("Obras en ejecución", color = TextMain, fontWeight = FontWeight.Bold, fontSize = 17.sp)
