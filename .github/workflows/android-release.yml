@@ -47,18 +47,18 @@ jobs:
           jarsigner -verify app/build/outputs/bundle/release/app-release.aab
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging app/build/outputs/apk/release/app-release.apk | grep -E '^package:|^application-label:'
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging app/build/outputs/apk/release/app-release.apk | grep -q "name='cl.rarce.calculadorapro'"
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging app/build/outputs/apk/release/app-release.apk | grep -q "versionCode='9'"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging app/build/outputs/apk/release/app-release.apk | grep -q "versionCode='10'"
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging app/build/outputs/apk/release/app-release.apk | grep -q "targetSdkVersion:'36'"
       - name: Publicar en GitHub Releases
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cp app/build/outputs/apk/release/app-release.apk Calculadora-de-Obra-v0.4.5.apk
-          cp app/build/outputs/bundle/release/app-release.aab Calculadora-de-Obra-v0.4.5.aab
-          gh release create "calculadora-de-obra-v0.4.5" \
-            Calculadora-de-Obra-v0.4.5.apk \
-            Calculadora-de-Obra-v0.4.5.aab \
+          cp app/build/outputs/apk/release/app-release.apk Calculadora-de-Obra-v0.4.6.apk
+          cp app/build/outputs/bundle/release/app-release.aab Calculadora-de-Obra-v0.4.6.aab
+          gh release create "calculadora-de-obra-v0.4.6" \
+            Calculadora-de-Obra-v0.4.6.apk \
+            Calculadora-de-Obra-v0.4.6.aab \
             --target "$GITHUB_SHA" \
-            --title "Cálculo de Obra v0.4.5 · APK + AAB firmados" \
+            --title "Cálculo de Obra v0.4.6 · APK + AAB firmados" \
             --notes "Compilación firmada para pruebas. Verificar instalación y funcionamiento antes de usar Play Store." \
             --prerelease
