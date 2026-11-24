@@ -745,6 +745,9 @@ fun PresupuestoScreen(
     var confirmarNuevo by remember { mutableStateOf(false) }
     var presupuestoAEliminar by remember { mutableStateOf<Long?>(null) }
     var buscarPresupuesto by remember { mutableStateOf("") }
+    var mostrarEditor by remember { mutableStateOf(items.isNotEmpty() && presupuestoActivoId == 0L) }
+    var presupuestoAbierto by remember { mutableStateOf<Long?>(null) }
+    var destinoExportacion by remember { mutableStateOf<PresupuestoGuardado?>(null) }
     var mensaje by remember { mutableStateOf("") }
     var mostrarPerfil by remember { mutableStateOf(false) }
     var perfil by remember { mutableStateOf(cargarPerfil(context)) }
@@ -761,7 +764,7 @@ fun PresupuestoScreen(
         ActivityResultContracts.CreateDocument("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     ) { uri ->
         if (uri != null) mensaje = runCatching {
-            exportarPresupuestoExcel(context, uri, presupuestoActual)
+            exportarPresupuestoExcel(context, uri, destinoExportacion ?: presupuestoActual)
             "Excel guardado correctamente."
         }.getOrElse { "Error al exportar Excel: " + (it.message ?: "desconocido") }
     }
@@ -769,9 +772,27 @@ fun PresupuestoScreen(
         ActivityResultContracts.CreateDocument("application/pdf")
     ) { uri ->
         if (uri != null) mensaje = runCatching {
-            exportarPresupuestoPdf(context, uri, presupuestoActual)
+            exportarPresupuestoPdf(context, uri, destinoExportacion ?: presupuestoActual)
             "PDF guardado correctamente."
         }.getOrElse { "Error al exportar PDF: " + (it.message ?: "desconocido") }
+    }
+    fun compartirGuardado(p: PresupuestoGuardado) {
+        val responsable = cargarPerfil(context)
+        val resumen = buildString {
+            appendLine("CÁLCULO DE OBRA — PRESUPUESTO")
+            appendLine("Cliente: ${p.cliente}")
+            appendLine("Obra: ${p.obra}")
+            appendLine("Fecha: ${p.fecha}")
+            if (responsable.nombre.isNotBlank()) appendLine("Responsable: ${responsable.nombre}")
+            if (responsable.telefono.isNotBlank()) appendLine("Teléfono: ${responsable.telefono}")
+            p.partidas.forEach { appendLine("${it.nombre}: ${it.cantidad} — ${formatoCLP(it.total)}") }
+            appendLine("Mano de obra: ${formatoCLP(p.manoDeObra)}")
+            appendLine("TOTAL: ${formatoCLP(p.total.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())}")
+        }
+        context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, resumen)
+        }, "Compartir presupuesto"))
     }
     val nombrePartida = items.firstOrNull()?.nombre?.split(" / ")?.take(2)?.joinToString(" · ")
         ?: "Sin trabajos agregados"
@@ -788,6 +809,118 @@ fun PresupuestoScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("Presupuestos", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = TextMain)
+                TextButton(onClick = { confirmarNuevo = true }) {
+                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Text("Nuevo", fontSize = 12.sp)
+                }
+            }
+            OutlinedTextField(value = buscarPresupuesto, onValueChange = { buscarPresupuesto = it },
+                label = { Text("Buscar cliente u obra") },
+                modifier = Modifier.fillMaxWidth(), singleLine = true)
+            if (encontrados.isEmpty())
+                Text("Aún no hay presupuestos guardados.", color = TextMuted, fontSize = 12.sp)
+        }
+        items(encontrados, key = { it.id }) { guardado ->
+            val conceptos = guardado.partidas.map { item ->
+                val partes = item.nombre.split(" / ")
+                if (partes.size >= 3) partes.take(2).joinToString(" · ") else "Otros trabajos"
+            }.distinct()
+            val tituloTrabajo = conceptos.firstOrNull() ?: "Sin partidas"
+            val mostrarDetalle = presupuestoAbierto == guardado.id
+            Card(colors = CardDefaults.cardColors(containerColor = BgCard),
+                modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.fillMaxWidth().padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text("Presupuesto · ${guardado.cliente}",
+                        fontWeight = FontWeight.Bold, color = TextMain, fontSize = 15.sp)
+                    Text(tituloTrabajo + if (conceptos.size > 1) " · +${conceptos.size - 1} trabajos" else "",
+                        fontSize = 13.sp, color = TextMuted, maxLines = 2)
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text(formatoCLP(guardado.total.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()),
+                            color = AccentGreen, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                        Text(guardado.fecha, color = TextMuted, fontSize = 11.sp)
+                    }
+                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                        TextButton(onClick = { presupuestoAbierto =
+                            if (mostrarDetalle) null else guardado.id },
+                            contentPadding = PaddingValues(horizontal = 5.dp, vertical = 0.dp),
+                            modifier = Modifier.height(34.dp)) {
+                            Icon(Icons.Default.FolderOpen, contentDescription = null,
+                                modifier = Modifier.size(15.dp))
+                            Text(if (mostrarDetalle) "Cerrar" else "Abrir", fontSize = 11.sp)
+                        }
+                        TextButton(onClick = {
+                            onAbrir(guardado.id); mostrarEditor = true
+                            mensaje = "Editando presupuesto de ${guardado.cliente}."
+                        }, contentPadding = PaddingValues(horizontal = 5.dp, vertical = 0.dp),
+                            modifier = Modifier.height(34.dp)) {
+                            Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(15.dp))
+                            Text("Editar", fontSize = 11.sp)
+                        }
+                        TextButton(onClick = {
+                            destinoExportacion = guardado
+                            pdfLauncher.launch("Presupuesto_" +
+                                guardado.cliente.replace(Regex("[^a-zA-Z0-9_-]"), "_").take(35) + ".pdf")
+                        }, contentPadding = PaddingValues(horizontal = 5.dp, vertical = 0.dp),
+                            modifier = Modifier.height(34.dp)) {
+                            Icon(Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(15.dp))
+                            Text("PDF", fontSize = 11.sp)
+                        }
+                        TextButton(onClick = { compartirGuardado(guardado) },
+                            contentPadding = PaddingValues(horizontal = 5.dp, vertical = 0.dp),
+                            modifier = Modifier.height(34.dp)) {
+                            Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(15.dp))
+                            Text("Compartir", fontSize = 11.sp)
+                        }
+                        TextButton(onClick = {
+                            destinoExportacion = guardado
+                            excelLauncher.launch("Presupuesto_" +
+                                guardado.cliente.replace(Regex("[^a-zA-Z0-9_-]"), "_").take(35) + ".xlsx")
+                        }, contentPadding = PaddingValues(horizontal = 5.dp, vertical = 0.dp),
+                            modifier = Modifier.height(34.dp)) { Text("Excel", fontSize = 11.sp) }
+                    }
+                    if (mostrarDetalle) {
+                        HorizontalDivider(color = BorderSubtle)
+                        if (guardado.obra.isNotBlank())
+                            Text("Obra: ${guardado.obra}", color = TextMuted, fontSize = 12.sp)
+                        guardado.partidas.forEach { partida ->
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(partida.nombre.substringAfterLast(" / "),
+                                        color = TextMain, fontSize = 12.sp)
+                                    Text(partida.cantidad, color = TextMuted, fontSize = 11.sp)
+                                }
+                                Text(formatoCLP(partida.total), color = TextMain, fontSize = 12.sp)
+                            }
+                        }
+                        Text("Mano de obra: ${formatoCLP(guardado.manoDeObra)}",
+                            color = TextMuted, fontSize = 12.sp)
+                        TextButton(onClick = { presupuestoAEliminar = guardado.id }) {
+                            Text("Eliminar presupuesto", color = AccentRed, fontSize = 11.sp)
+                        }
+                    }
+                }
+            }
+        }
+        item {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(if (presupuestoActivoId == 0L) "Borrador actual" else "Presupuesto en edición",
+                    color = TextMain, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                TextButton(onClick = { mostrarEditor = !mostrarEditor },
+                    contentPadding = PaddingValues(horizontal = 6.dp)) {
+                    Text(if (mostrarEditor) "Ocultar edición" else "Mostrar edición", fontSize = 12.sp)
+                    Icon(if (mostrarEditor) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = null, modifier = Modifier.size(18.dp))
+                }
+            }
+        }
+        if (mostrarEditor) item {
             Text("Detalle del presupuesto", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = TextMain)
             Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF0F2922)),
                 modifier = Modifier.fillMaxWidth()) {
@@ -845,7 +978,7 @@ fun PresupuestoScreen(
             if (mensaje.isNotBlank()) Text(mensaje, color = AccentAmber, fontSize = 12.sp)
         }
 
-        item {
+        if (mostrarEditor) item {
             Card(
                 colors = CardDefaults.cardColors(containerColor = BgCard),
                 shape = RoundedCornerShape(14.dp),
@@ -874,7 +1007,7 @@ fun PresupuestoScreen(
             }
         }
 
-        item {
+        if (mostrarEditor) item {
             Card(colors = CardDefaults.cardColors(containerColor = BgCard),
                 modifier = Modifier.fillMaxWidth()) {
                 Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -889,7 +1022,7 @@ fun PresupuestoScreen(
                 }
             }
         }
-        item {
+        if (mostrarEditor) item {
             Text("GUARDAR ESTE PRESUPUESTO", color = AccentGreen,
                 fontWeight = FontWeight.Bold, fontSize = 13.sp)
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -916,7 +1049,7 @@ fun PresupuestoScreen(
                 }
             }
         }
-        item {
+        if (mostrarEditor) item {
             Text(items.size.toString() + " materiales y partidas acumuladas",
                 fontSize = 12.sp, color = TextMuted)
             if (duplicados > 0) {
@@ -930,7 +1063,7 @@ fun PresupuestoScreen(
                 TextButton(onClick = onVaciarItems) { Text("Vaciar borrador", color = AccentRed) }
             }
         }
-        item {
+        if (mostrarEditor) item {
             Button(
                 onClick = {
                     val resumen = buildString {
@@ -966,32 +1099,6 @@ fun PresupuestoScreen(
             }
         }
 
-        item {
-            HorizontalDivider(color = BorderSubtle)
-            Text("Presupuestos guardados", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-            OutlinedTextField(value = buscarPresupuesto, onValueChange = { buscarPresupuesto = it },
-                label = { Text("Buscar por cliente, obra o número") },
-                modifier = Modifier.fillMaxWidth(), singleLine = true)
-            Text("${encontrados.size} presupuesto(s) encontrado(s)", fontSize = 12.sp, color = TextMuted)
-        }
-        items(encontrados, key = { it.id }) { guardado ->
-            Card(colors = CardDefaults.cardColors(containerColor = BgCard)) {
-                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(guardado.cliente, fontWeight = FontWeight.SemiBold, color = TextMain)
-                    Text(guardado.obra + " · " + guardado.fecha + " · N° " + guardado.id,
-                        fontSize = 11.sp, color = TextMuted)
-                    Text(formatoCLP(guardado.total.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()), color = AccentGreen)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = { onAbrir(guardado.id); mensaje = "Presupuesto abierto." }) {
-                            Text("Abrir")
-                        }
-                        TextButton(onClick = { presupuestoAEliminar = guardado.id }) {
-                            Text("Eliminar", color = AccentRed)
-                        }
-                    }
-                }
-            }
-        }
         item {
             OutlinedButton(
                 onClick = { onGuardarEnFinanzas(granTotal) },
