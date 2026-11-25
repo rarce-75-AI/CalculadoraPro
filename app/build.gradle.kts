@@ -11,8 +11,8 @@ android {
         applicationId = "cl.rarce.calculadorapro"
         minSdk = 24
         targetSdk = 36
-        versionCode = 16
-        versionName = "0.5.2"
+        versionCode = 17
+        versionName = "0.5.3"
 
         vectorDrawables {
             useSupportLibrary = true
@@ -65,6 +65,7 @@ android {
 }
 
 dependencies {
+    testImplementation("junit:junit:4.13.2")
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
     implementation("androidx.activity:activity-compose:1.8.2")

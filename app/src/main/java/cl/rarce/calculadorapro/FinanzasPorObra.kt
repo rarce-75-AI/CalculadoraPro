@@ -23,7 +23,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.text.SimpleDateFormat
-import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
@@ -42,22 +41,13 @@ private fun formatoMontoObra(v: Long): String =
 private fun hoyObra(): String =
     SimpleDateFormat("dd/MM/yyyy", Locale("es", "CL")).format(Date())
 
-private fun fechaObraValida(valor: String): Date? = runCatching {
-    val sdf = SimpleDateFormat("dd/MM/yyyy", Locale("es", "CL")).apply { isLenient = false }
-    sdf.parse(valor)
-}.getOrNull()
+private fun fechaObraValida(valor: String): Date? = FechasObra.parsear(valor)
 
-private fun fechaTerminoObra(inicio: String, dias: Int): String {
-    val fecha = fechaObraValida(inicio) ?: return "Fecha inválida"
-    val calendario = Calendar.getInstance().apply { time = fecha; add(Calendar.DAY_OF_MONTH, dias) }
-    return SimpleDateFormat("dd/MM/yyyy", Locale("es", "CL")).format(calendario.time)
-}
+private fun fechaTerminoObra(inicio: String, dias: Int): String =
+    FechasObra.termino(inicio, dias) ?: "Fecha inválida"
 
-private fun diasRestantesObra(inicio: String, dias: Int): Long? {
-    val fin = fechaObraValida(fechaTerminoObra(inicio, dias)) ?: return null
-    val hoy = fechaObraValida(hoyObra()) ?: return null
-    return (fin.time - hoy.time) / 86400000L
-}
+private fun diasRestantesObra(inicio: String, dias: Int): Long? =
+    FechasObra.diasRestantes(inicio, dias, hoyObra())
 
 fun cargarControlObras(context: Context): List<ControlObra> = runCatching {
     val raw = context.getSharedPreferences("calculadora_pro_v2", Context.MODE_PRIVATE)
