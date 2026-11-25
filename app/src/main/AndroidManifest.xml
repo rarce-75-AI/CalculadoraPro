@@ -5,7 +5,7 @@
         android:allowBackup="true"
         android:icon="@drawable/ic_launcher"
         android:roundIcon="@drawable/ic_launcher"
-        android:label="Cálculo de Obra"
+        android:label="Calculadora de Obra"
         android:supportsRtl="true"
         android:theme="@style/Theme.CalculadoraPro">
         <activity
