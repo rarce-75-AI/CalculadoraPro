@@ -14,7 +14,7 @@ internal object FechasObra {
     }
 
     fun parsear(valor: String): Date? {
-        if (!Regex("\\d{2}/\\d{2}/\\d{4}").matches(valor)) return null
+        if (!Regex("\\d{1,2}/\\d{1,2}/\\d{4}").matches(valor)) return null
         return runCatching { formato().parse(valor) }.getOrNull()
     }
 

@@ -47,27 +47,27 @@ jobs:
           jarsigner -verify app/build/outputs/bundle/release/app-release.aab
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging app/build/outputs/apk/release/app-release.apk | grep -E '^package:|^application-label:'
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging app/build/outputs/apk/release/app-release.apk | grep -q "name='cl.rarce.calculadorapro'"
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging app/build/outputs/apk/release/app-release.apk | grep -q "versionCode='17'"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging app/build/outputs/apk/release/app-release.apk | grep -q "versionCode='18'"
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging app/build/outputs/apk/release/app-release.apk | grep -q "targetSdkVersion:'36'"
       - name: Publicar en GitHub Releases
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cp app/build/outputs/apk/release/app-release.apk Calculadora-de-Obra-v0.5.3.apk
-          cp app/build/outputs/bundle/release/app-release.aab Calculadora-de-Obra-v0.5.3.aab
-          TAG="calculadora-de-obra-v0.5.3"
+          cp app/build/outputs/apk/release/app-release.apk Calculadora-de-Obra-v0.5.4.apk
+          cp app/build/outputs/bundle/release/app-release.aab Calculadora-de-Obra-v0.5.4.aab
+          TAG="calculadora-de-obra-v0.5.4"
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "La versión ya existe: actualizar APK y AAB sin duplicar la publicación."
             gh release upload "$TAG" \
-              Calculadora-de-Obra-v0.5.3.apk \
-              Calculadora-de-Obra-v0.5.3.aab \
+              Calculadora-de-Obra-v0.5.4.apk \
+              Calculadora-de-Obra-v0.5.4.aab \
               --clobber
           else
             gh release create "$TAG" \
-              Calculadora-de-Obra-v0.5.3.apk \
-              Calculadora-de-Obra-v0.5.3.aab \
+              Calculadora-de-Obra-v0.5.4.apk \
+              Calculadora-de-Obra-v0.5.4.aab \
               --target "$GITHUB_SHA" \
-              --title "Cálculo de Obra v0.5.3 · APK + AAB firmados" \
+              --title "Cálculo de Obra v0.5.4 · APK + AAB firmados" \
               --notes "Compilación firmada para pruebas. Verificar instalación y funcionamiento antes de usar Play Store." \
               --prerelease
           fi

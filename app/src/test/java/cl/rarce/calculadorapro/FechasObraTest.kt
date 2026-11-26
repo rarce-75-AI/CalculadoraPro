@@ -7,10 +7,16 @@ import java.util.TimeZone
 class FechasObraTest {
     @Test fun rechazaFechasInexistentesYTextoSobrante() {
         listOf("31/02/2026", "29/02/2026", "01/13/2026", "00/01/2026",
-            "01/03/2026 extra", "01/03/2026\n", "1/3/2026", "").forEach {
+            "01/03/2026 extra", "01/03/2026\n", "").forEach {
             assertNull(it, FechasObra.parsear(it))
         }
         assertNotNull(FechasObra.parsear("29/02/2024"))
+    }
+
+    @Test fun conservaFechasGuardadasConUnDigito() {
+        assertNotNull(FechasObra.parsear("1/3/2026"))
+        assertEquals("02/03/2026", FechasObra.termino("1/3/2026", 1))
+        assertEquals(1L, FechasObra.diasRestantes("1/3/2026", 2, "02/03/2026"))
     }
 
     @Test fun sumaDiasEntreMesesYAnos() {
